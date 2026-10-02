@@ -1,0 +1,277 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { JASTIP_PAID_STATUS } from "@/features/jastip/types";
+import type { OrderService } from "@/features/orders/types";
+import { getOrderStatusMeta } from "@/features/orders/status";
+import { fetchProfileRole } from "@/features/profile/queries";
+import {
+  PAID_ORDER_STATUS,
+  PENDING_VERIFICATION_STATUS,
+} from "@/features/payment/constants";
+import { mapDatabaseError } from "@/lib/supabase/errors";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  confirmOrderPaymentSchema,
+  updateAdminOrderStatusSchema,
+} from "./schemas";
+import type { AdminOperatorStatus } from "./status";
+import type { AdminActionResult } from "./types";
+
+type SupabaseServerClient = Awaited<
+  ReturnType<typeof createSupabaseServerClient>
+>;
+
+const ADMIN_PATH = "/admin";
+const ORDERS_PATH = "/orders";
+
+/** Route customer-facing tiap layanan yang perlu di-refresh setelah update. */
+const SERVICE_PATHS: Record<OrderService, string> = {
+  jastip: "/jastip",
+  printing: "/printing",
+  projects: "/projects",
+  tutoring: "/tutoring",
+  academic: "/academic",
+};
+
+/** Status "lunas" per layanan setelah operator memverifikasi bukti transfer. */
+const PAID_STATUS_BY_SERVICE: Record<OrderService, string> = {
+  jastip: JASTIP_PAID_STATUS,
+  printing: PAID_ORDER_STATUS,
+  projects: PAID_ORDER_STATUS,
+  tutoring: PAID_ORDER_STATUS,
+  academic: PAID_ORDER_STATUS,
+};
+
+const SESSION_EXPIRED: AdminActionResult = {
+  status: "error",
+  message: "Sesi berakhir. Silakan login kembali.",
+};
+
+const FORBIDDEN: AdminActionResult = {
+  status: "error",
+  message: "Anda tidak memiliki akses operator.",
+};
+
+/**
+ * Menulis status baru ke tabel layanan yang sesuai. Operator Campify bekerja
+ * sebagai penyedia layanan langsung sehingga tidak dibatasi kepemilikan pada
+ * filter kueri — isolasi data tetap dijaga oleh RLS Supabase di database.
+ *
+ * Update tidak memfilter status asal, sehingga pesanan berstatus `PAID`
+ * (lunas QRIS) dapat dilanjutkan operator ke `in_progress` lalu `completed`.
+ * Status target yang diizinkan dibatasi `ADMIN_OPERATOR_STATUSES`
+ * (`in_progress` | `completed` | `cancelled`) melalui `updateAdminOrderStatusSchema`.
+ */
+function updateOrderStatus(
+  supabase: SupabaseServerClient,
+  service: OrderService,
+  orderId: string,
+  status: AdminOperatorStatus,
+) {
+  switch (service) {
+    case "jastip":
+      return supabase
+        .from("jastip_orders")
+        .update({ status })
+        .eq("id", orderId)
+        .select("id");
+    case "printing":
+      return supabase
+        .from("print_orders")
+        .update({ status })
+        .eq("id", orderId)
+        .select("id");
+    case "projects":
+      return supabase
+        .from("coding_projects")
+        .update({ status })
+        .eq("id", orderId)
+        .select("id");
+    case "tutoring":
+      return supabase
+        .from("tutoring_sessions")
+        .update({ status })
+        .eq("id", orderId)
+        .select("id");
+    case "academic":
+      return supabase
+        .from("academic_services")
+        .update({ status })
+        .eq("id", orderId)
+        .select("id");
+  }
+}
+
+/**
+ * Pembaruan status pesanan oleh operator Campify dari dashboard `/admin`.
+ * Me-refresh halaman admin sekaligus seluruh route customer-facing terkait agar
+ * perubahan langsung terlihat oleh pemesan.
+ */
+export async function updateAdminOrderStatusAction(input: {
+  service: OrderService;
+  orderId: string;
+  status: AdminOperatorStatus;
+}): Promise<AdminActionResult> {
+  const parsed = updateAdminOrderStatusSchema.safeParse(input);
+  if (!parsed.success) {
+    return { status: "error", message: "Permintaan pembaruan status tidak valid." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) {
+    return SESSION_EXPIRED;
+  }
+
+  // Defense-in-depth: Server Action dapat dipanggil langsung tanpa melewati
+  // guard halaman `/admin`, sehingga peran diverifikasi ulang di sini.
+  const role = await fetchProfileRole(data.user.id);
+  if (role !== "admin") {
+    return FORBIDDEN;
+  }
+
+  const result = await updateOrderStatus(
+    supabase,
+    parsed.data.service,
+    parsed.data.orderId,
+    parsed.data.status,
+  );
+
+  if (result.error) {
+    return {
+      status: "error",
+      message: mapDatabaseError(
+        result.error.message,
+        "Gagal memperbarui status pesanan. Silakan coba lagi.",
+      ),
+    };
+  }
+
+  if (!result.data || result.data.length === 0) {
+    return {
+      status: "error",
+      message:
+        "Pesanan tidak ditemukan atau Anda tidak memiliki izin memperbaruinya.",
+    };
+  }
+
+  revalidatePath(ADMIN_PATH);
+  revalidatePath(ORDERS_PATH);
+  revalidatePath(`${ORDERS_PATH}/${parsed.data.orderId}`);
+  revalidatePath(SERVICE_PATHS[parsed.data.service]);
+
+  return {
+    status: "success",
+    message: `Status diperbarui ke "${getOrderStatusMeta(parsed.data.status).label}".`,
+  };
+}
+
+/**
+ * Menandai pembayaran manual QRIS sebagai lunas: memindahkan pesanan dari
+ * `PENDING_VERIFICATION` ke status "dibayar" (`PAID`, atau `accepted` untuk
+ * Jastip). Hanya berlaku bila status saat ini benar-benar menunggu verifikasi.
+ */
+function confirmPayment(
+  supabase: SupabaseServerClient,
+  service: OrderService,
+  orderId: string,
+) {
+  const status = PAID_STATUS_BY_SERVICE[service];
+
+  switch (service) {
+    case "jastip":
+      return supabase
+        .from("jastip_orders")
+        .update({ status })
+        .eq("id", orderId)
+        .eq("status", PENDING_VERIFICATION_STATUS)
+        .select("id");
+    case "printing":
+      return supabase
+        .from("print_orders")
+        .update({ status })
+        .eq("id", orderId)
+        .eq("status", PENDING_VERIFICATION_STATUS)
+        .select("id");
+    case "projects":
+      return supabase
+        .from("coding_projects")
+        .update({ status })
+        .eq("id", orderId)
+        .eq("status", PENDING_VERIFICATION_STATUS)
+        .select("id");
+    case "tutoring":
+      return supabase
+        .from("tutoring_sessions")
+        .update({ status })
+        .eq("id", orderId)
+        .eq("status", PENDING_VERIFICATION_STATUS)
+        .select("id");
+    case "academic":
+      return supabase
+        .from("academic_services")
+        .update({ status })
+        .eq("id", orderId)
+        .eq("status", PENDING_VERIFICATION_STATUS)
+        .select("id");
+  }
+}
+
+/**
+ * Konfirmasi pembayaran manual oleh operator: memverifikasi bukti transfer lalu
+ * menandai pesanan lunas agar dapat dilanjutkan ke `in_progress` → `completed`.
+ */
+export async function confirmOrderPaymentAction(input: {
+  service: OrderService;
+  orderId: string;
+}): Promise<AdminActionResult> {
+  const parsed = confirmOrderPaymentSchema.safeParse(input);
+  if (!parsed.success) {
+    return { status: "error", message: "Permintaan konfirmasi tidak valid." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) {
+    return SESSION_EXPIRED;
+  }
+
+  const role = await fetchProfileRole(data.user.id);
+  if (role !== "admin") {
+    return FORBIDDEN;
+  }
+
+  const result = await confirmPayment(
+    supabase,
+    parsed.data.service,
+    parsed.data.orderId,
+  );
+
+  if (result.error) {
+    return {
+      status: "error",
+      message: mapDatabaseError(
+        result.error.message,
+        "Gagal mengonfirmasi pembayaran. Silakan coba lagi.",
+      ),
+    };
+  }
+
+  if (!result.data || result.data.length === 0) {
+    return {
+      status: "error",
+      message: "Pesanan tidak ditemukan atau belum menunggu verifikasi.",
+    };
+  }
+
+  revalidatePath(ADMIN_PATH);
+  revalidatePath(ORDERS_PATH);
+  revalidatePath(`${ORDERS_PATH}/${parsed.data.orderId}`);
+  revalidatePath(SERVICE_PATHS[parsed.data.service]);
+
+  return {
+    status: "success",
+    message: "Pembayaran dikonfirmasi! Status pesanan kini Lunas.",
+  };
+}

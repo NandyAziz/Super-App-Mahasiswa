@@ -1,0 +1,26 @@
+# NEXT.JS 16.1.1 & REACT ARCHITECTURE
+- STRICT ASYNC: Always `await` dynamic APIs (`params`, `searchParams`, `cookies`, `headers`) in Server Components/Actions.
+- NO SSR FALSE: Never use `next/dynamic` with `{ ssr: false }` inside Server Components.
+- OPTIMIZATION: Mandatory use of `next/image` and `next/font`.
+- STATE: Use React Suspense with Skeleton loading for async operations.
+
+# DOMAIN-DRIVEN DESIGN (DDD) & CLEAN CODE
+- MODULARITY: Keep business logic inside `src/features/`. Do not bloat `src/app`.
+- SOLID & SRP: Functions must be small, single-responsibility. 
+- NESTING LIMIT: Maximum 2 levels of indentation per function. Early returns preferred.
+
+# UI/UX & STYLING (TAILWIND CSS)
+- DESIGN SYSTEM: Mobile-First approach (PWA ready).
+- THEME: Slate/Zinc (Neutral) with Indigo/Deep Violet (Primary Accents).
+- INTERACTIONS: All clickable elements MUST include `active:scale-95 transition-all duration-200`.
+- GLASSMORPHISM: Use `bg-white/70 backdrop-blur-md border border-white/20` for floating cards/navs.
+- FEEDBACK: Mandatory Skeleton Loaders during fetch, Toast Notifications for success/error states.
+
+# SUPABASE & DATABASE SECURITY
+- RLS STRICT: All queries must respect Row Level Security via `auth.uid()`.
+- DATA ISOLATION: Cross-tenant/cross-user data leakage is strictly prohibited.
+- AUTHENTICATION: Mandatory regex validation for emails: `/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(ac\.id|edu)$/`.
+
+# VALIDATION & TYPES (ZOD)
+- STRICT TYPING: TypeScript strict mode enabled. No `any` types.
+- ZOD EVERYWHERE: All API payloads, Server Actions inputs, and Form submissions MUST be validated with Zod schemas before processing.

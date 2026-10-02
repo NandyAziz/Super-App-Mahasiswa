@@ -1,0 +1,8 @@
+# Konfigurasi deploy Campify di Netlify.
+# Netlify otomatis memakai adapter OpenNext untuk Next.js (zero-config), jadi
+# tidak perlu mendaftarkan @netlify/plugin-nextjs secara manual.
+[build]
+  command = "npm run build"
+
+[build.environment]
+  NODE_VERSION = "20"
