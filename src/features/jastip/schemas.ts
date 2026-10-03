@@ -18,8 +18,7 @@ export const whatsappSchema = z
 
 /**
  * Input pembuatan titipan. Ongkir dinamis dihitung di Server Action dari
- * `distance_km` + `is_rainy` (lihat `@/lib/pricing`), lalu disimpan ke kolom
- * `delivery_tip`.
+ * `distance_km` (lihat `@/lib/pricing`), lalu disimpan ke kolom `delivery_tip`.
  */
 export const createJastipSchema = z.object({
   item_name: z.string().trim().min(3, "Nama barang minimal 3 karakter"),
@@ -32,7 +31,6 @@ export const createJastipSchema = z.object({
     .number()
     .positive("Jarak harus lebih dari 0 KM")
     .max(JASTIP_MAX_DISTANCE_KM, JASTIP_OUT_OF_RANGE_MESSAGE),
-  is_rainy: z.coerce.boolean().default(false),
 });
 
 export type CreateJastipInput = z.infer<typeof createJastipSchema>;

@@ -74,13 +74,11 @@ async function getSessionContext() {
 export async function createJastipOrderAction(
   formData: FormData,
 ): Promise<JastipActionResult> {
-  const rawIsRainy = formData.get("is_rainy");
   const parsed = createJastipSchema.safeParse({
     item_name: formData.get("item_name"),
     whatsapp: formData.get("whatsapp"),
     dropoff_location: formData.get("dropoff_location"),
     distance_km: formData.get("distance_km"),
-    is_rainy: rawIsRainy === "on" || rawIsRainy === "true",
   });
 
   if (!parsed.success) {
@@ -97,7 +95,6 @@ export async function createJastipOrderAction(
   try {
     shippingTotal = calculateJastipShippingFee({
       distanceKm: parsed.data.distance_km,
-      isRainy: parsed.data.is_rainy,
     }).total;
   } catch (cause) {
     const message =

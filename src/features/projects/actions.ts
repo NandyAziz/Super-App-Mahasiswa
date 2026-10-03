@@ -69,7 +69,6 @@ export async function createProjectAction(
   const parsed = createProjectSchema.safeParse({
     title: formData.get("title"),
     description: formData.get("description"),
-    tech_stack: formData.get("tech_stack"),
     budget: formData.get("budget"),
   });
 
@@ -90,7 +89,8 @@ export async function createProjectAction(
     client_id: context.userId,
     title: parsed.data.title,
     description: parsed.data.description,
-    tech_stack: parsed.data.tech_stack,
+    // `tech_stack` memakai default database ('{}') karena selector teknologi
+    // sudah dihapus dari form pengajuan proyek.
     budget: parsed.data.budget,
     status: "pending",
   });

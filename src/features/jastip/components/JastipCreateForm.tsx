@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import Image from "next/image";
 import {
-  CloudRain,
   Info,
   Loader2,
   MapPin,
@@ -15,7 +14,6 @@ import {
   Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 import { formatRupiah } from "@/lib/format";
 import { TextareaField } from "@/components/ui/TextareaField";
 import { TextField } from "@/components/ui/TextField";
@@ -71,7 +69,7 @@ function JastipHero() {
   );
 }
 
-/** Kartu rincian ongkir (base + ekstra + jam sibuk + hujan). */
+/** Kartu rincian ongkir (base + ekstra + jam sibuk). */
 function FeeBreakdown({ breakdown }: { breakdown: JastipShippingBreakdown }) {
   return (
     <div className="space-y-1.5 rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4">
@@ -96,13 +94,6 @@ function FeeBreakdown({ breakdown }: { breakdown: JastipShippingBreakdown }) {
         </div>
       ) : null}
 
-      {breakdown.rainSurcharge > 0 ? (
-        <div className="flex items-center justify-between text-xs font-medium text-sky-600">
-          <span>Biaya hujan</span>
-          <span>+{formatRupiah(breakdown.rainSurcharge)}</span>
-        </div>
-      ) : null}
-
       <div className="mt-1 flex items-center justify-between border-t border-indigo-100 pt-2 text-sm font-bold text-slate-900">
         <span>Total Ongkir</span>
         <span>{formatRupiah(breakdown.total)}</span>
@@ -116,7 +107,6 @@ export function JastipCreateForm({ onSuccess }: JastipCreateFormProps) {
   const [isPending, startTransition] = useTransition();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [distance, setDistance] = useState(String(DEFAULT_DISTANCE));
-  const [isRainy, setIsRainy] = useState(false);
 
   // Pratinjau ongkir real-time. Form hanya dirender di client (di dalam Modal
   // yang baru mount saat dibuka), sehingga `new Date()` aman dari mismatch.
@@ -129,7 +119,7 @@ export function JastipCreateForm({ onSuccess }: JastipCreateFormProps) {
     try {
       return {
         status: "ok",
-        breakdown: calculateJastipShippingFee({ distanceKm: value, isRainy }),
+        breakdown: calculateJastipShippingFee({ distanceKm: value }),
       };
     } catch (cause) {
       if (cause instanceof JastipOutOfRangeError) {
@@ -137,12 +127,11 @@ export function JastipCreateForm({ onSuccess }: JastipCreateFormProps) {
       }
       throw cause;
     }
-  }, [distance, isRainy]);
+  }, [distance]);
 
   function resetForm(form: HTMLFormElement): void {
     form.reset();
     setDistance(String(DEFAULT_DISTANCE));
-    setIsRainy(false);
     setFieldErrors({});
   }
 
@@ -234,26 +223,6 @@ export function JastipCreateForm({ onSuccess }: JastipCreateFormProps) {
           disabled={isPending}
           required
         />
-
-        <button
-          type="button"
-          onClick={() => setIsRainy((value) => !value)}
-          aria-pressed={isRainy}
-          disabled={isPending}
-          className={cn(
-            "flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-xs font-semibold transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60",
-            isRainy
-              ? "border-sky-200 bg-sky-50 text-sky-600"
-              : "border-slate-200 bg-white text-slate-500",
-          )}
-        >
-          <span className="flex items-center gap-1.5">
-            <CloudRain className="h-4 w-4" />
-            Sedang hujan?
-          </span>
-          <span>{isRainy ? "Ya (+biaya hujan)" : "Tidak"}</span>
-        </button>
-        <input type="hidden" name="is_rainy" value={isRainy ? "true" : "false"} />
 
         {feeState.status === "ok" ? (
           <FeeBreakdown breakdown={feeState.breakdown} />

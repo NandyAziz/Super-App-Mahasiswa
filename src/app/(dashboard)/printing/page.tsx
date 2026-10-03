@@ -2,49 +2,50 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ChevronLeft, Printer } from "lucide-react";
-import { formatRupiah } from "@/lib/format";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import { getPrintOrdersAction } from "@/features/printing/actions";
 import { PrintBoard } from "@/features/printing/components/PrintBoard";
 import { PrintSkeleton } from "@/features/printing/components/PrintSkeleton";
-import {
-  BINDING_OPTIONS,
-  PRINT_TYPE_OPTIONS,
-} from "@/features/printing/pricing";
 
 export const metadata: Metadata = {
   title: "Jasa Cetak · Campify",
 };
 
-function PriceSummary() {
+/** Alur pesan cetak setelah opsi kompleks dipindahkan ke mitra cetak. */
+const PRINT_STEPS = [
+  "Lampirkan dokumen — unggah berkas atau tempel link Google Drive.",
+  "Isi nomor WhatsApp & lokasi antar untuk koordinasi.",
+  "Tentukan jumlah salinan yang dibutuhkan.",
+  "Mitra cetak konfirmasi harga lalu proses pesananmu.",
+] as const;
+
+function ServiceSteps() {
   return (
     <section className="rounded-3xl border border-white/20 bg-white/70 p-4 shadow-sm backdrop-blur-md">
       <div className="mb-3 flex items-center gap-2">
         <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white">
           <Printer className="h-4 w-4" />
         </span>
-        <h2 className="text-sm font-semibold text-zinc-900">Daftar Harga</h2>
+        <h2 className="text-sm font-semibold text-zinc-900">
+          Cara Pesan Cetak
+        </h2>
       </div>
 
-      <ul className="space-y-1.5 text-xs text-zinc-600">
-        {PRINT_TYPE_OPTIONS.map((option) => (
-          <li key={option.value} className="flex items-center justify-between">
-            <span>Cetak {option.label}</span>
-            <span className="font-semibold text-zinc-800">
-              {formatRupiah(option.pricePerPage)}/lembar
+      <ol className="space-y-2 text-xs text-zinc-600">
+        {PRINT_STEPS.map((step, index) => (
+          <li key={step} className="flex items-start gap-2">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-[0.7rem] font-semibold text-indigo-600">
+              {index + 1}
             </span>
+            <span>{step}</span>
           </li>
         ))}
+      </ol>
 
-        {BINDING_OPTIONS.filter((option) => option.price > 0).map((option) => (
-          <li key={option.value} className="flex items-center justify-between">
-            <span>Jilid {option.label}</span>
-            <span className="font-semibold text-zinc-800">
-              +{formatRupiah(option.price)}
-            </span>
-          </li>
-        ))}
-      </ul>
+      <p className="mt-3 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-[0.7rem] leading-relaxed font-medium text-amber-700">
+        Opsi cetak (warna, ukuran kertas, finishing) &amp; total harga
+        dikonfirmasi mitra via WhatsApp.
+      </p>
     </section>
   );
 }
@@ -85,7 +86,7 @@ export default function PrintingPage() {
         </div>
       </header>
 
-      <PriceSummary />
+      <ServiceSteps />
 
       <Suspense fallback={<PrintSkeleton />}>
         <PrintBoardLoader />

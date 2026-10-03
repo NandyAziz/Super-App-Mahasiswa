@@ -1,10 +1,5 @@
 import { getAcademicServiceTypeMeta } from "@/features/academic/service-types";
 import type { AcademicServiceType } from "@/features/academic/types";
-import {
-  calculatePrintPrice,
-  getPrintTypeLabel,
-} from "@/features/printing/pricing";
-import type { BindingType, PrintType } from "@/features/printing/types";
 import { formatRelativeTime, formatRupiah, getUrlLabel } from "@/lib/format";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { orderDetailParamSchema } from "./schemas";
@@ -24,9 +19,8 @@ interface JastipRow {
 interface PrintRow {
   id: string;
   document_url: string;
-  print_type: PrintType;
-  binding_type: BindingType;
-  total_pages: number;
+  copies: number;
+  delivery_location: string | null;
   status: OrderStatus;
   created_at: string;
 }
@@ -62,7 +56,7 @@ interface AcademicRow {
 const JASTIP_SUMMARY_SELECT =
   "id, user_id, courier_id, item_name, dropoff_location, delivery_tip, status, created_at";
 const PRINT_SUMMARY_SELECT =
-  "id, document_url, print_type, binding_type, total_pages, status, created_at";
+  "id, document_url, copies, delivery_location, status, created_at";
 const PROJECT_SUMMARY_SELECT =
   "id, client_id, freelancer_id, title, budget, status, created_at";
 const TUTORING_SUMMARY_SELECT =
@@ -93,26 +87,19 @@ function toJastipSummaries(
 }
 
 function toPrintSummaries(rows: PrintRow[] | null, now: Date): OrderSummary[] {
-  return (rows ?? []).map((row) => {
-    const price = calculatePrintPrice(
-      row.print_type,
-      row.binding_type,
-      row.total_pages,
-    );
-
-    return {
-      id: row.id,
-      service: "printing",
-      title: getUrlLabel(row.document_url),
-      subtitle: `${row.total_pages} halaman · ${getPrintTypeLabel(row.print_type)}`,
-      amountLabel: `Estimasi ${formatRupiah(price.total)}`,
-      status: row.status,
-      role: "owner",
-      createdAt: row.created_at,
-      createdLabel: formatRelativeTime(row.created_at, now),
-      amount: price.total,
-    };
-  });
+  return (rows ?? []).map((row) => ({
+    id: row.id,
+    service: "printing",
+    title: getUrlLabel(row.document_url),
+    subtitle: `${row.copies} salinan · ${row.delivery_location ?? "Lokasi belum diisi"}`,
+    // Harga cetak dikonfirmasi mitra via WhatsApp, jadi belum ada tagihan di muka.
+    amountLabel: null,
+    status: row.status,
+    role: "owner",
+    createdAt: row.created_at,
+    createdLabel: formatRelativeTime(row.created_at, now),
+    amount: null,
+  }));
 }
 
 function toProjectSummaries(

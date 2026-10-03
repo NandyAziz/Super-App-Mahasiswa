@@ -1,11 +1,5 @@
 import { getAcademicServiceTypeMeta } from "@/features/academic/service-types";
 import type { AcademicServiceType } from "@/features/academic/types";
-import {
-  calculatePrintPrice,
-  getBindingLabel,
-  getPrintTypeLabel,
-} from "@/features/printing/pricing";
-import type { BindingType, PrintType } from "@/features/printing/types";
 import type { OrderStatus } from "@/features/orders/types";
 import { formatRelativeTime, formatRupiah } from "@/lib/format";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -31,9 +25,8 @@ interface PrintRow {
   id: string;
   user_id: string;
   document_url: string;
-  print_type: PrintType;
-  binding_type: BindingType;
-  total_pages: number;
+  copies: number;
+  delivery_location: string | null;
   status: OrderStatus;
   created_at: string;
   payment_proof_url: string | null;
@@ -43,7 +36,6 @@ interface ProjectRow {
   id: string;
   client_id: string;
   title: string;
-  tech_stack: string[] | null;
   budget: number;
   status: OrderStatus;
   created_at: string;
@@ -80,9 +72,9 @@ const DEFAULT_CUSTOMER_NAME = "Mahasiswa";
 const JASTIP_ADMIN_SELECT =
   "id, user_id, item_name, dropoff_location, delivery_tip, status, created_at, payment_proof_url";
 const PRINT_ADMIN_SELECT =
-  "id, user_id, document_url, print_type, binding_type, total_pages, status, created_at, payment_proof_url";
+  "id, user_id, document_url, copies, delivery_location, status, created_at, payment_proof_url";
 const PROJECT_ADMIN_SELECT =
-  "id, client_id, title, tech_stack, budget, status, created_at, payment_proof_url";
+  "id, client_id, title, budget, status, created_at, payment_proof_url";
 const TUTORING_ADMIN_SELECT =
   "id, student_id, subject, price, status, created_at, payment_proof_url";
 const ACADEMIC_ADMIN_SELECT =
@@ -116,19 +108,15 @@ function buildPrintOrder(
   names: Map<string, string>,
   now: Date,
 ): AdminOrder {
-  const price = calculatePrintPrice(
-    row.print_type,
-    row.binding_type,
-    row.total_pages,
-  );
-
   return {
     id: row.id,
     service: "printing",
     customerName: customerName(names, row.user_id),
-    detail: `${row.total_pages} hlm · ${getPrintTypeLabel(row.print_type)} · Jilid ${getBindingLabel(row.binding_type)}`,
-    amount: price.total,
-    amountLabel: `Estimasi ${formatRupiah(price.total)}`,
+    detail: `${row.copies} salinan · ${row.delivery_location ?? "Lokasi belum diisi"}`,
+    // Harga cetak kini dikonfirmasi mitra via WhatsApp (bukan estimasi otomatis),
+    // sehingga belum ada tagihan yang bisa ditagihkan di muka.
+    amount: null,
+    amountLabel: null,
     status: row.status,
     paymentProofUrl: row.payment_proof_url,
     createdAt: row.created_at,
@@ -141,13 +129,11 @@ function buildProjectOrder(
   names: Map<string, string>,
   now: Date,
 ): AdminOrder {
-  const stack = row.tech_stack?.length ? ` · ${row.tech_stack.join(", ")}` : "";
-
   return {
     id: row.id,
     service: "projects",
     customerName: customerName(names, row.client_id),
-    detail: `${row.title}${stack}`,
+    detail: row.title,
     amount: row.budget,
     amountLabel: `Budget ${formatRupiah(row.budget)}`,
     status: row.status,

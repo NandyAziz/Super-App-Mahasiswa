@@ -7,47 +7,24 @@ import type { ZodError } from "zod";
 import {
   Copy,
   FileText,
-  Layers,
   Link2,
   Loader2,
   MapPin,
   MessageSquare,
   Minus,
-  Palette,
   Phone,
   Plus,
   PrinterCheck,
-  Repeat,
-  Ruler,
   Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { formatRupiah } from "@/lib/format";
 import { TextareaField } from "@/components/ui/TextareaField";
 import { TextField } from "@/components/ui/TextField";
 import { createPrintOrderAction } from "../actions";
-import {
-  PRINT_TYPE_OPTIONS,
-  calculatePrintPrice,
-  getPrintTypeLabel,
-} from "../pricing";
-import {
-  FINISHING_TO_BINDING,
-  PRINT_FINISHING_OPTIONS,
-  PRINT_PAPER_SIZE_OPTIONS,
-  PRINT_SIDE_OPTIONS,
-  getFinishingLabel,
-} from "../options";
 import { printRequestSchema } from "../schemas";
 import { MAX_UPLOAD_BYTES, uploadPrintDocument } from "../upload";
-import type {
-  PrintActionResult,
-  PrintFinishing,
-  PrintPaperSize,
-  PrintSide,
-  PrintType,
-} from "../types";
+import type { PrintActionResult } from "../types";
 
 interface PrintFormProps {
   /** Dipanggil setelah pesanan cetak berhasil dibuat. */
@@ -56,9 +33,8 @@ interface PrintFormProps {
 
 type SourceMode = "upload" | "link";
 
-const DEFAULT_PAGES = 10;
 const DEFAULT_COPIES = 1;
-const MAX_TOTAL_PAGES = 2000;
+const MAX_COPIES = 100;
 
 /** Mode lampiran dokumen: unggah berkas tunggal atau tempel link Drive. */
 const SOURCE_TABS: readonly {
@@ -98,60 +74,8 @@ function PrintHero() {
       <div className="min-w-0">
         <h3 className="text-sm font-semibold text-slate-900">Jasa Cetak</h3>
         <p className="text-xs text-slate-500">
-          Unggah dokumen atau tautkan Drive, atur opsi cetak, ambil di kampus.
+          Unggah dokumen atau tautkan Drive, ambil hasil cetak di kampus.
         </p>
-      </div>
-    </div>
-  );
-}
-
-interface OptionPillsProps<T extends string> {
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  options: readonly { value: T; label: string; description: string }[];
-  value: T;
-  disabled?: boolean;
-  onChange: (value: T) => void;
-}
-
-/** Grup pilihan berbentuk pill 2 kolom (warna, kertas, sisi, finishing). */
-function OptionPills<T extends string>({
-  label,
-  icon: Icon,
-  options,
-  value,
-  disabled,
-  onChange,
-}: OptionPillsProps<T>) {
-  return (
-    <div className="space-y-1.5">
-      <span className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
-        <Icon className="h-3.5 w-3.5 text-indigo-500" />
-        {label}
-      </span>
-      <div className="grid grid-cols-2 gap-2">
-        {options.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => onChange(option.value)}
-            disabled={disabled}
-            aria-pressed={value === option.value}
-            className={cn(
-              "rounded-xl border p-2.5 text-left transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60",
-              value === option.value
-                ? "border-indigo-400 bg-indigo-50 ring-2 ring-indigo-200/60"
-                : "border-slate-200 bg-white",
-            )}
-          >
-            <span className="block text-xs font-semibold text-slate-900">
-              {option.label}
-            </span>
-            <span className="block text-[0.65rem] text-slate-500">
-              {option.description}
-            </span>
-          </button>
-        ))}
       </div>
     </div>
   );
@@ -166,31 +90,17 @@ export function PrintForm({ onSuccess }: PrintFormProps) {
   const [file, setFile] = useState<File | null>(null);
   const [link, setLink] = useState("");
 
-  const [printType, setPrintType] = useState<PrintType>("bw");
-  const [paperSize, setPaperSize] = useState<PrintPaperSize>("a4");
-  const [side, setSide] = useState<PrintSide>("single");
-  const [finishing, setFinishing] = useState<PrintFinishing>("none");
   const [copies, setCopies] = useState<number>(DEFAULT_COPIES);
-  const [pages, setPages] = useState<number>(DEFAULT_PAGES);
   const [whatsapp, setWhatsapp] = useState("");
   const [deliveryLocation, setDeliveryLocation] = useState("");
   const [customNote, setCustomNote] = useState("");
-
-  const bindingType = FINISHING_TO_BINDING[finishing];
-  const effectivePages = Math.min(MAX_TOTAL_PAGES, pages * copies);
-  const price = calculatePrintPrice(printType, bindingType, effectivePages);
 
   function resetForm(): void {
     setFieldErrors({});
     setSource("upload");
     setFile(null);
     setLink("");
-    setPrintType("bw");
-    setPaperSize("a4");
-    setSide("single");
-    setFinishing("none");
     setCopies(DEFAULT_COPIES);
-    setPages(DEFAULT_PAGES);
     setWhatsapp("");
     setDeliveryLocation("");
     setCustomNote("");
@@ -198,10 +108,6 @@ export function PrintForm({ onSuccess }: PrintFormProps) {
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>): void {
     setFile(event.target.files?.[0] ?? null);
-  }
-
-  function handlePagesChange(event: React.ChangeEvent<HTMLInputElement>): void {
-    setPages(event.target.value === "" ? 0 : Number(event.target.value));
   }
 
   async function resolveDocumentUrl(): Promise<string | null> {
@@ -253,12 +159,7 @@ export function PrintForm({ onSuccess }: PrintFormProps) {
 
         const parsed = printRequestSchema.safeParse({
           document_url: documentUrl,
-          print_type: printType,
-          paper_size: paperSize,
-          sides: side,
-          finishing,
           copies,
-          total_pages: pages,
           contact_whatsapp: whatsapp,
           delivery_location: deliveryLocation,
           custom_note: customNote,
@@ -272,12 +173,7 @@ export function PrintForm({ onSuccess }: PrintFormProps) {
 
         const formData = new FormData();
         formData.set("document_url", parsed.data.document_url);
-        formData.set("print_type", parsed.data.print_type);
-        formData.set("binding_type", bindingType);
-        formData.set("paper_size", parsed.data.paper_size);
-        formData.set("sides", parsed.data.sides);
         formData.set("copies", String(parsed.data.copies));
-        formData.set("total_pages", String(effectivePages));
         formData.set("contact_whatsapp", parsed.data.contact_whatsapp);
         formData.set("delivery_location", parsed.data.delivery_location);
         formData.set("custom_note", parsed.data.custom_note);
@@ -370,6 +266,7 @@ export function PrintForm({ onSuccess }: PrintFormProps) {
         </p>
       </section>
 
+
       <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
         <div className="flex items-center gap-1.5">
           <Phone className="h-4 w-4 text-indigo-500" />
@@ -409,47 +306,6 @@ export function PrintForm({ onSuccess }: PrintFormProps) {
       </section>
 
       <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
-        <div className="flex items-center gap-1.5">
-          <Palette className="h-4 w-4 text-indigo-500" />
-          <span className="text-xs font-medium text-slate-600">Opsi Cetak</span>
-        </div>
-
-        <OptionPills
-          label="Warna"
-          icon={Palette}
-          options={PRINT_TYPE_OPTIONS}
-          value={printType}
-          disabled={isPending}
-          onChange={setPrintType}
-        />
-
-        <OptionPills
-          label="Ukuran Kertas"
-          icon={Ruler}
-          options={PRINT_PAPER_SIZE_OPTIONS}
-          value={paperSize}
-          disabled={isPending}
-          onChange={setPaperSize}
-        />
-
-        <OptionPills
-          label="Sisi Cetak"
-          icon={Repeat}
-          options={PRINT_SIDE_OPTIONS}
-          value={side}
-          disabled={isPending}
-          onChange={setSide}
-        />
-
-        <OptionPills
-          label="Finishing"
-          icon={Layers}
-          options={PRINT_FINISHING_OPTIONS}
-          value={finishing}
-          disabled={isPending}
-          onChange={setFinishing}
-        />
-
         <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2">
           <span className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
             <Copy className="h-3.5 w-3.5 text-indigo-500" />
@@ -470,8 +326,10 @@ export function PrintForm({ onSuccess }: PrintFormProps) {
             </span>
             <button
               type="button"
-              onClick={() => setCopies((value) => Math.min(100, value + 1))}
-              disabled={isPending || copies >= 100}
+              onClick={() =>
+                setCopies((value) => Math.min(MAX_COPIES, value + 1))
+              }
+              disabled={isPending || copies >= MAX_COPIES}
               aria-label="Tambah salinan"
               className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
             >
@@ -480,56 +338,20 @@ export function PrintForm({ onSuccess }: PrintFormProps) {
           </div>
         </div>
 
-        <TextField
-          id="total_pages"
-          name="total_pages"
-          type="number"
-          inputMode="numeric"
-          min={1}
-          max={MAX_TOTAL_PAGES}
-          label="Jumlah Halaman per Salinan"
-          icon={Layers}
-          value={pages}
-          onChange={handlePagesChange}
-          error={fieldErrors.total_pages}
-          disabled={isPending}
-          required
-        />
-
         <TextareaField
           id="custom_note"
           name="custom_note"
           rows={3}
-          label="Catatan Kebutuhan Khusus"
-          placeholder="Contoh: jilid jepret tengah, kertas kover warna merah, cetak halaman terbalik..."
+          label="Catatan (opsional)"
+          placeholder="Contoh: cetak warna untuk cover, jilid spiral, halaman tertentu saja..."
           icon={MessageSquare}
           value={customNote}
           onChange={(event) => setCustomNote(event.target.value)}
           error={fieldErrors.custom_note}
-          hint="Tulis permintaan khusus yang tidak ada di opsi standar di atas"
+          hint="Tulis permintaan khusus bila ada"
           disabled={isPending}
         />
       </section>
-
-      <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4">
-        <p className="mb-2 text-[0.7rem] font-semibold tracking-wide text-indigo-500 uppercase">
-          Estimasi Harga
-        </p>
-        <div className="flex items-center justify-between text-xs text-slate-600">
-          <span>
-            {getPrintTypeLabel(printType)} × {effectivePages} lembar
-          </span>
-          <span>{formatRupiah(price.printCost)}</span>
-        </div>
-        <div className="mt-1 flex items-center justify-between text-xs text-slate-600">
-          <span>Finishing {getFinishingLabel(finishing)}</span>
-          <span>{formatRupiah(price.bindingCost)}</span>
-        </div>
-        <div className="mt-2 flex items-center justify-between border-t border-indigo-100 pt-2 text-sm font-semibold text-slate-900">
-          <span>Total Estimasi</span>
-          <span>{formatRupiah(price.total)}</span>
-        </div>
-      </div>
 
       <button
         type="submit"

@@ -53,7 +53,6 @@ export interface CodingProject {
   freelancer_id: string | null;
   title: string;
   description: string;
-  tech_stack: string[];
   budget: number;
   status: ProjectStatus;
   created_at: string;

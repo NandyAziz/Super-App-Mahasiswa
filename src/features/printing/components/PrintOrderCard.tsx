@@ -2,17 +2,19 @@
 
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
-import { Ban, BookOpen, FileText, Layers, Loader2 } from "lucide-react";
+import {
+  Ban,
+  Copy,
+  FileText,
+  Loader2,
+  MapPin,
+  MessageSquare,
+  Phone,
+} from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { formatRupiah, getUrlLabel } from "@/lib/format";
+import { getUrlLabel } from "@/lib/format";
 import { updatePrintStatusAction } from "../actions";
-import {
-  calculatePrintPrice,
-  getBindingLabel,
-  getPrintTypeGradient,
-  getPrintTypeLabel,
-} from "../pricing";
 import { canCancelPrintOrder, resolvePrintCardAction } from "../selectors";
 import { getPrintStatusMeta } from "../status";
 import type {
@@ -30,11 +32,6 @@ export function PrintOrderCard({ order }: PrintOrderCardProps) {
   const [isPending, startTransition] = useTransition();
 
   const meta = getPrintStatusMeta(order.status);
-  const price = calculatePrintPrice(
-    order.print_type,
-    order.binding_type,
-    order.total_pages,
-  );
   const primaryAction = resolvePrintCardAction(order.status);
   const showCancel = canCancelPrintOrder(order.status);
 
@@ -58,12 +55,7 @@ export function PrintOrderCard({ order }: PrintOrderCardProps) {
     <article className="rounded-3xl border border-white/20 bg-white/70 p-4 shadow-sm backdrop-blur-md">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <span
-            className={cn(
-              "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br text-white shadow-md",
-              getPrintTypeGradient(order.print_type),
-            )}
-          >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-md">
             <FileText className="h-5 w-5" />
           </span>
           <div className="min-w-0">
@@ -71,7 +63,7 @@ export function PrintOrderCard({ order }: PrintOrderCardProps) {
               {getUrlLabel(order.document_url)}
             </h3>
             <p className="text-[0.7rem] text-zinc-400">
-              {formatRupiah(price.pricePerPage)}/lembar · {price.pages} halaman
+              {order.copies} salinan
             </p>
           </div>
         </div>
@@ -88,27 +80,29 @@ export function PrintOrderCard({ order }: PrintOrderCardProps) {
 
       <div className="mt-3 flex flex-wrap gap-2 text-[0.7rem] text-zinc-600">
         <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-100 bg-indigo-50 px-2.5 py-1">
-          <FileText className="h-3 w-3 text-indigo-500" />
-          {getPrintTypeLabel(order.print_type)}
+          <Copy className="h-3 w-3 text-indigo-500" />
+          {order.copies} salinan
         </span>
         <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-100 bg-indigo-50 px-2.5 py-1">
-          <BookOpen className="h-3 w-3 text-indigo-500" />
-          Jilid {getBindingLabel(order.binding_type)}
+          <MapPin className="h-3 w-3 text-indigo-500" />
+          {order.delivery_location ?? "Lokasi belum diisi"}
         </span>
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-100 bg-indigo-50 px-2.5 py-1">
-          <Layers className="h-3 w-3 text-indigo-500" />
-          {order.total_pages} halaman
-        </span>
+        {order.contact_whatsapp ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-100 bg-indigo-50 px-2.5 py-1">
+            <Phone className="h-3 w-3 text-indigo-500" />
+            {order.contact_whatsapp}
+          </span>
+        ) : null}
       </div>
 
-      <div className="mt-3 flex items-center justify-between rounded-2xl bg-zinc-50/80 px-3 py-2">
-        <span className="text-[0.7rem] font-medium text-zinc-500">
-          Estimasi Total
-        </span>
-        <span className="text-sm font-semibold text-zinc-900">
-          {formatRupiah(price.total)}
-        </span>
-      </div>
+      {order.custom_note ? (
+        <div className="mt-3 flex items-start gap-2 rounded-2xl bg-zinc-50/80 px-3 py-2">
+          <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-indigo-500" />
+          <p className="text-[0.7rem] leading-relaxed text-zinc-600">
+            {order.custom_note}
+          </p>
+        </div>
+      ) : null}
 
       {primaryAction || showCancel ? (
         <div className="mt-3 flex gap-2">

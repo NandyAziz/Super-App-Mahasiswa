@@ -102,19 +102,6 @@ export function ProjectCard({ project, currentUserId }: ProjectCardProps) {
         {project.description}
       </p>
 
-      {project.tech_stack.length > 0 ? (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {project.tech_stack.map((tech) => (
-            <span
-              key={tech}
-              className="rounded-full border border-indigo-100 bg-indigo-50 px-2.5 py-1 text-[0.65rem] font-medium text-indigo-600"
-            >
-              {tech}
-            </span>
-          ))}
-        </div>
-      ) : null}
-
       <div className="mt-3 flex items-center justify-between rounded-2xl bg-zinc-50/80 px-3 py-2">
         <span className="flex items-center gap-1.5 text-[0.7rem] font-medium text-zinc-500">
           <Wallet className="h-3.5 w-3.5 text-indigo-500" />

@@ -21,12 +21,6 @@ export const JASTIP_EXTRA_PER_KM = 2000;
 /** Pengali jam sibuk (peak hour) — +20%. */
 export const JASTIP_PEAK_MULTIPLIER = 1.2;
 
-/** Surcharge hujan untuk jarak ≤ 2 KM. */
-export const JASTIP_RAIN_NEAR_SURCHARGE = 2000;
-
-/** Surcharge hujan untuk jarak > 2 KM. */
-export const JASTIP_RAIN_FAR_SURCHARGE = 4000;
-
 /** Ongkir minimum. */
 export const JASTIP_MIN_FEE = 5000;
 
@@ -38,7 +32,6 @@ export const JASTIP_OUT_OF_RANGE_MESSAGE = "Di luar jangkauan (Maksimal 5 KM)";
 
 export interface JastipShippingInput {
   distanceKm: number;
-  isRainy: boolean;
   /** Waktu untuk menentukan jam sibuk; default `new Date()`. */
   at?: Date;
 }
@@ -52,8 +45,7 @@ export interface JastipShippingBreakdown {
   isPeakHour: boolean;
   /** 1 jika bukan jam sibuk, atau `JASTIP_PEAK_MULTIPLIER`. */
   peakMultiplier: number;
-  rainSurcharge: number;
-  /** Total (base + ekstra) × pengali jam sibuk + surcharge hujan, sebelum pembulatan. */
+  /** Total (base + ekstra) × pengali jam sibuk, sebelum pembulatan. */
   rawTotal: number;
   /** Ongkir akhir: dibulatkan ke Rp500 & minimal Rp5.000. */
   total: number;
@@ -82,18 +74,16 @@ export class JastipOutOfRangeError extends Error {
 }
 
 /**
- * Menghitung ongkir Jastip berdasarkan jarak & kondisi hujan.
+ * Menghitung ongkir Jastip berdasarkan jarak.
  *
  * Aturan:
  * - Jarak > 5 KM → melempar `JastipOutOfRangeError`.
  * - Tarif dasar Rp5.000 untuk 0–2 KM, +Rp2.000 tiap KM ekstra (ceil).
  * - Pengali jam sibuk +20% otomatis pada 11:00–13:00 & 16:00–18:00.
- * - Surcharge hujan: ≤2 KM +Rp2.000, >2 KM +Rp4.000.
  * - Total dibulatkan ke kelipatan Rp500, minimum Rp5.000.
  */
 export function calculateJastipShippingFee({
   distanceKm,
-  isRainy,
   at = new Date(),
 }: JastipShippingInput): JastipShippingBreakdown {
   if (!Number.isFinite(distanceKm) || distanceKm < 0) {
@@ -111,13 +101,7 @@ export function calculateJastipShippingFee({
   const peak = isPeakHour(at);
   const peakMultiplier = peak ? JASTIP_PEAK_MULTIPLIER : 1;
 
-  const rainSurcharge = isRainy
-    ? distanceKm <= JASTIP_BASE_DISTANCE_KM
-      ? JASTIP_RAIN_NEAR_SURCHARGE
-      : JASTIP_RAIN_FAR_SURCHARGE
-    : 0;
-
-  const rawTotal = (baseFee + extraFee) * peakMultiplier + rainSurcharge;
+  const rawTotal = (baseFee + extraFee) * peakMultiplier;
   const rounded =
     Math.ceil(rawTotal / JASTIP_ROUNDING_STEP) * JASTIP_ROUNDING_STEP;
   const total = Math.max(JASTIP_MIN_FEE, rounded);
@@ -129,7 +113,6 @@ export function calculateJastipShippingFee({
     extraFee,
     isPeakHour: peak,
     peakMultiplier,
-    rainSurcharge,
     rawTotal,
     total,
   };

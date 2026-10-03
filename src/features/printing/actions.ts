@@ -4,9 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { ZodError } from "zod";
 import { ensureUserProfile } from "@/features/profile/ensure";
 import { mapDatabaseError } from "@/lib/supabase/errors";
-import { formatRupiah } from "@/lib/format";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { calculatePrintPrice } from "./pricing";
 import { createPrintOrderSchema, updatePrintStatusSchema } from "./schemas";
 import { PRINT_STATUS_MESSAGE } from "./status";
 import type {
@@ -64,12 +62,7 @@ export async function createPrintOrderAction(
 ): Promise<PrintActionResult> {
   const parsed = createPrintOrderSchema.safeParse({
     document_url: formData.get("document_url"),
-    print_type: formData.get("print_type"),
-    binding_type: formData.get("binding_type"),
-    paper_size: formData.get("paper_size"),
-    sides: formData.get("sides"),
     copies: formData.get("copies"),
-    total_pages: formData.get("total_pages"),
     contact_whatsapp: formData.get("contact_whatsapp"),
     delivery_location: formData.get("delivery_location"),
     custom_note: formData.get("custom_note") ?? "",
@@ -90,27 +83,18 @@ export async function createPrintOrderAction(
 
   const {
     document_url,
-    print_type,
-    binding_type,
-    paper_size,
-    sides,
     copies,
-    total_pages,
     contact_whatsapp,
     delivery_location,
     custom_note,
   } = parsed.data;
-  const price = calculatePrintPrice(print_type, binding_type, total_pages);
 
+  // Kolom opsi cetak (print_type, binding_type, total_pages) memakai default
+  // database karena opsi kompleks sudah dihapus dari form.
   const { error } = await context.supabase.from("print_orders").insert({
     user_id: context.userId,
     document_url,
-    print_type,
-    binding_type,
-    paper_size,
-    sides,
     copies,
-    total_pages,
     contact_whatsapp,
     delivery_location,
     custom_note,
@@ -130,7 +114,7 @@ export async function createPrintOrderAction(
   revalidatePath(PRINTING_PATH);
   return {
     status: "success",
-    message: `Pesanan cetak dibuat! Estimasi ${formatRupiah(price.total)}`,
+    message: "Pesanan cetak dibuat! Mitra cetak akan segera menghubungi kamu.",
   };
 }
 
