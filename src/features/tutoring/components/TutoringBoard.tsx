@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { GraduationCap, Plus, Sparkles, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { selectMyStudySessions, selectTutorOffers } from "../selectors";
 import type { TutoringSession } from "../types";
@@ -15,9 +15,24 @@ const TABS: { id: TutoringTab; label: string }[] = [
   { id: "offers", label: "Tawaran Mengajar" },
 ];
 
-const EMPTY_MESSAGE: Record<TutoringTab, string> = {
-  mine: "Belum ada jadwal belajar. Yuk reservasi tutor pertamamu!",
-  offers: "Belum ada tawaran mengajar untuk saat ini.",
+/** Konten empty state per tab: ikon mengundang + judul + ajakan bertindak. */
+const EMPTY_STATE: Record<
+  TutoringTab,
+  { icon: LucideIcon; title: string; description: string; hint: string }
+> = {
+  mine: {
+    icon: GraduationCap,
+    title: "Belum ada jadwal belajar",
+    description: "Reservasi tutor pertamamu dan mulai belajar bareng sekarang.",
+    hint: "Tekan tombol Reservasi Tutor di atas untuk memulai.",
+  },
+  offers: {
+    icon: Sparkles,
+    title: "Belum ada tawaran mengajar",
+    description:
+      "Sesi belajar baru dari mahasiswa lain akan muncul di sini untuk kamu terima.",
+    hint: "Sesi open yang kamu ajar akan tercatat sebagai pengalaman mengajar.",
+  },
 };
 
 interface TutoringBoardProps {
@@ -70,12 +85,7 @@ export function TutoringBoard({
       </div>
 
       {visibleSessions.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 rounded-3xl border border-dashed border-zinc-200 bg-white/60 px-6 py-10 text-center backdrop-blur-md">
-          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-500">
-            <Plus className="h-6 w-6" />
-          </span>
-          <p className="text-sm text-zinc-500">{EMPTY_MESSAGE[tab]}</p>
-        </div>
+        <EmptyState tab={tab} />
       ) : (
         <div className="space-y-3">
           {visibleSessions.map((session) => (
@@ -93,6 +103,29 @@ export function TutoringBoard({
         onClose={() => setIsModalOpen(false)}
         defaultSchedule={defaultSchedule}
       />
+    </div>
+  );
+}
+
+/** Empty state mengundang: ikon besar + judul + ajakan bertindak. */
+function EmptyState({ tab }: { tab: TutoringTab }) {
+  const state = EMPTY_STATE[tab];
+  const Icon = state.icon;
+
+  return (
+    <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-indigo-200 bg-white/60 px-6 py-12 text-center backdrop-blur-md">
+      <span className="flex h-16 w-16 items-center justify-center rounded-3xl bg-gradient-to-br from-indigo-50 to-violet-50 text-indigo-500 ring-1 ring-indigo-100">
+        <Icon className="h-8 w-8" />
+      </span>
+
+      <div className="space-y-1">
+        <p className="text-sm font-semibold text-zinc-700">{state.title}</p>
+        <p className="mx-auto max-w-[34ch] text-xs leading-relaxed text-zinc-500">
+          {state.description}
+        </p>
+      </div>
+
+      <p className="text-[0.7rem] text-zinc-400">{state.hint}</p>
     </div>
   );
 }

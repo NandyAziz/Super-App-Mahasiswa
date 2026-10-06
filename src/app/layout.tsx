@@ -13,12 +13,34 @@ export const metadata: Metadata = {
   title: "Campify - Super App Mahasiswa",
   description:
     "Campify menyatukan jastip, jasa cetak, marketplace proyek IT, tutor privat, dan asisten akademik mahasiswa dalam satu aplikasi.",
+  // PWA: manifest + ikon Apple memakai aset lokal di /public (tanpa host remote).
+  manifest: "/manifest.json",
+  applicationName: "Campify",
+  appleWebApp: {
+    capable: true,
+    title: "Campify",
+    statusBarStyle: "default",
+  },
+  icons: {
+    icon: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [
+      { url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
 };
 
 export const viewport: Viewport = {
   themeColor: "#4f46e5",
   width: "device-width",
   initialScale: 1,
+  // `maximumScale` sengaja tidak dikunci: membiarkan pengguna tetap bisa
+  // memperbesar (aksesibilitas). Yang dicegah hanyalah pantulan scroll
+  // (overscroll) lewat CSS, bukan zoom.
+  // Standalone mode: konten menembus notch/home-indicator di iOS.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

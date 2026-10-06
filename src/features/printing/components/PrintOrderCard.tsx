@@ -10,10 +10,11 @@ import {
   MapPin,
   MessageSquare,
   Phone,
+  Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { getUrlLabel } from "@/lib/format";
+import { formatRupiah, getUrlLabel } from "@/lib/format";
 import { updatePrintStatusAction } from "../actions";
 import { canCancelPrintOrder, resolvePrintCardAction } from "../selectors";
 import { getPrintStatusMeta } from "../status";
@@ -25,14 +26,24 @@ import type {
 
 interface PrintOrderCardProps {
   order: PrintOrder;
+  /**
+   * Operator-only. Halaman pengguna (`/printing`) TIDAK boleh menampilkan aksi
+   * operator ("Terima Pesanan" / "Mulai Cetak" / "Tandai Selesai") — aksi
+   * tersebut hanya tampil di dashboard `/admin` (lewat `AdminOrderCard`).
+   * Default `false` agar aksi operator tidak pernah bocor ke halaman user
+   * hanya karena lupa mengoper props ini.
+   */
+  canManage?: boolean;
 }
 
-export function PrintOrderCard({ order }: PrintOrderCardProps) {
+export function PrintOrderCard({ order, canManage = false }: PrintOrderCardProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
   const meta = getPrintStatusMeta(order.status);
-  const primaryAction = resolvePrintCardAction(order.status);
+  // Aksi operator hanya dirender bila pemanggil menyalakannya secara eksplisit.
+  const primaryAction = canManage ? resolvePrintCardAction(order.status) : null;
+  // Pembatalan tetap milik pengguna (membatalkan pesanan sendiri).
   const showCancel = canCancelPrintOrder(order.status);
 
   function applyResult(result: PrintActionResult): void {
@@ -52,7 +63,7 @@ export function PrintOrderCard({ order }: PrintOrderCardProps) {
   }
 
   return (
-    <article className="rounded-3xl border border-white/20 bg-white/70 p-4 shadow-sm backdrop-blur-md">
+    <article className="group rounded-2xl border border-white/20 bg-white/70 p-4 shadow-sm backdrop-blur-md transition-all duration-200 hover:border-indigo-200/70 hover:shadow-md">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-md">
@@ -87,6 +98,12 @@ export function PrintOrderCard({ order }: PrintOrderCardProps) {
           <MapPin className="h-3 w-3 text-indigo-500" />
           {order.delivery_location ?? "Lokasi belum diisi"}
         </span>
+        {order.delivery_fee > 0 ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-100 bg-indigo-50 px-2.5 py-1">
+            <Wallet className="h-3 w-3 text-indigo-500" />
+            Ongkir {formatRupiah(order.delivery_fee)}
+          </span>
+        ) : null}
         {order.contact_whatsapp ? (
           <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-100 bg-indigo-50 px-2.5 py-1">
             <Phone className="h-3 w-3 text-indigo-500" />

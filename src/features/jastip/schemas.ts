@@ -1,5 +1,10 @@
 import { z } from "zod";
 import {
+  destinationLatSchema,
+  destinationLngSchema,
+  optionalCoordinateSchema,
+} from "@/features/orders/coordinates";
+import {
   JASTIP_MAX_DISTANCE_KM,
   JASTIP_OUT_OF_RANGE_MESSAGE,
 } from "@/lib/pricing";
@@ -31,6 +36,15 @@ export const createJastipSchema = z.object({
     .number()
     .positive("Jarak harus lebih dari 0 KM")
     .max(JASTIP_MAX_DISTANCE_KM, JASTIP_OUT_OF_RANGE_MESSAGE),
+  /**
+   * Koordinat titik antar / lokasi barang (WGS84) — OPSIONAL.
+   *
+   * Diambil otomatis dari GPS perangkat saat form dibuka (lihat
+   * `CaptureLocationField`). Bila pelanggan menolak izin lokasi, form tetap
+   * terkirim dan kolom disimpan `NULL` — tidak pernah diisi koordinas default.
+   */
+  destination_lat: optionalCoordinateSchema(destinationLatSchema, "Latitude"),
+  destination_lng: optionalCoordinateSchema(destinationLngSchema, "Longitude"),
 });
 
 export type CreateJastipInput = z.infer<typeof createJastipSchema>;

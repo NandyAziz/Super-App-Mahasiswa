@@ -3,9 +3,15 @@
 import { revalidatePath } from "next/cache";
 import type { ZodError } from "zod";
 import { ensureUserProfile } from "@/features/profile/ensure";
+import { fetchProfileNames } from "@/features/profile/queries";
 import { mapDatabaseError } from "@/lib/supabase/errors";
 import { formatRupiah } from "@/lib/format";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  canCancelOrder,
+  ORDER_CANCEL_BLOCKED_MESSAGE,
+} from "@/features/orders/cancellation";
+import type { OrderStatus } from "@/features/orders/types";
 import {
   createProjectSchema,
   takeProjectSchema,
@@ -70,6 +76,9 @@ export async function createProjectAction(
     title: formData.get("title"),
     description: formData.get("description"),
     budget: formData.get("budget"),
+    // Form tidak lagi mengirim selector teknologi; `null` dinormalkan oleh
+    // skema menjadi `[]` (array kosong, bukan null — kolom bertipe not null).
+    tech_stack: formData.get("tech_stack"),
   });
 
   if (!parsed.success) {
@@ -89,13 +98,23 @@ export async function createProjectAction(
     client_id: context.userId,
     title: parsed.data.title,
     description: parsed.data.description,
-    // `tech_stack` memakai default database ('{}') karena selector teknologi
-    // sudah dihapus dari form pengajuan proyek.
+    // `tech_stack` adalah `text[] not null`; kirim array eksplisit (default `[]`)
+    // alih-alih mengandalkan default database agar bebas dari perbedaan skema.
+    tech_stack: parsed.data.tech_stack,
     budget: parsed.data.budget,
     status: "pending",
   });
 
   if (error) {
+    console.error("[Projects] INSERT gagal:", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      clientId: context.userId,
+      title: parsed.data.title,
+    });
+
     return {
       status: "error",
       message: mapDatabaseError(
@@ -131,7 +150,21 @@ export async function getProjectsAction(): Promise<CodingProject[]> {
   }
 
   const projects: CodingProject[] = data ?? [];
-  return projects;
+
+  // Resolusi identitas (best-effort) — lihat `fetchProfileNames`.
+  const names = await fetchProfileNames(
+    context.supabase,
+    projects.flatMap((project) => [project.client_id, project.freelancer_id]),
+  );
+
+  return projects.map((project) => ({
+    ...project,
+    tech_stack: project.tech_stack ?? [],
+    client_name: names.get(project.client_id) ?? null,
+    freelancer_name: project.freelancer_id
+      ? (names.get(project.freelancer_id) ?? null)
+      : null,
+  }));
 }
 
 export async function takeProjectAction(
@@ -154,6 +187,15 @@ export async function takeProjectAction(
     .eq("status", "pending");
 
   if (error) {
+    console.error("[Projects] UPDATE (ambil proyek) gagal:", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      projectId: parsed.data.projectId,
+      freelancerId: context.userId,
+    });
+
     return {
       status: "error",
       message: mapDatabaseError(
@@ -185,13 +227,68 @@ export async function updateProjectStatusAction(
   const ownerColumn =
     parsed.data.status === "cancelled" ? "client_id" : "freelancer_id";
 
-  const { error } = await context.supabase
+  // Pembatalan hanya sah saat proyek masih `pending` (belum ada freelancer).
+  // Status dibaca ulang dari database (tidak pernah dipercaya dari client).
+  if (parsed.data.status === "cancelled") {
+    const { data: current, error: readError } = await context.supabase
+      .from("coding_projects")
+      .select("status")
+      .eq("id", parsed.data.projectId)
+      .maybeSingle();
+
+    if (readError) {
+      console.error("[Projects] Gagal membaca status saat pembatalan:", {
+        code: readError.code,
+        message: readError.message,
+        details: readError.details,
+        hint: readError.hint,
+        projectId: parsed.data.projectId,
+      });
+
+      return {
+        status: "error",
+        message: mapDatabaseError(
+          readError.message,
+          "Gagal memeriksa status proyek. Silakan coba lagi.",
+        ),
+      };
+    }
+
+    if (!current) {
+      return { status: "error", message: "Pesanan tidak ditemukan." };
+    }
+
+    if (!canCancelOrder(current.status as OrderStatus)) {
+      return { status: "error", message: ORDER_CANCEL_BLOCKED_MESSAGE };
+    }
+  }
+
+  let query = context.supabase
     .from("coding_projects")
     .update({ status: parsed.data.status })
     .eq("id", parsed.data.projectId)
     .eq(ownerColumn, context.userId);
 
+  // Penjaga atomik: mencegah pembatalan bila proyek sudah diambil freelancer
+  // di antara pemeriksaan di atas dan UPDATE ini.
+  if (parsed.data.status === "cancelled") {
+    query = query.eq("status", "pending");
+  }
+
+  const { error } = await query;
+
   if (error) {
+    console.error("[Projects] UPDATE status gagal:", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      projectId: parsed.data.projectId,
+      nextStatus: parsed.data.status,
+      ownerColumn,
+      userId: context.userId,
+    });
+
     return {
       status: "error",
       message: mapDatabaseError(

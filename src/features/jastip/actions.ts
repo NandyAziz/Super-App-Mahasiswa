@@ -8,6 +8,7 @@ import {
   JastipOutOfRangeError,
   calculateJastipShippingFee,
 } from "@/lib/pricing";
+import { fetchWeatherSurge } from "@/lib/weather";
 import { mapDatabaseError } from "@/lib/supabase/errors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
@@ -16,6 +17,10 @@ import {
   updateJastipStatusSchema,
 } from "./schemas";
 import { buildJastipPickupLabel } from "./locations";
+import { applyJastipPromo, resolveJastipPromo } from "@/features/promos/eligibility";
+import { applyFreeShipping, resolveFreeShippingStatus } from "@/features/orders/free-shipping";
+import { countPastOrdersForFreeShipping } from "@/features/orders/free-shipping-queries";
+import type { JastipFeeResolution } from "@/features/promos/catalog";
 import type {
   JastipActionResult,
   JastipOrder,
@@ -79,6 +84,10 @@ export async function createJastipOrderAction(
     whatsapp: formData.get("whatsapp"),
     dropoff_location: formData.get("dropoff_location"),
     distance_km: formData.get("distance_km"),
+    // Koordinat lokasi tujuan (opsional, diisi otomatis oleh GPS di browser).
+    // String kosong dinormalisasi ke `null` oleh Zod bila GPS tidak diizinkan.
+    destination_lat: formData.get("destination_lat") ?? null,
+    destination_lng: formData.get("destination_lng") ?? null,
   });
 
   if (!parsed.success) {
@@ -89,13 +98,35 @@ export async function createJastipOrderAction(
     };
   }
 
+  // Diagnostik koordinat tujuan: nilai mentah dari form (diagnostik saja).
+  console.log(
+    "[Jastip Order] RECEIVED COORDS:",
+    formData.get("destination_lat"),
+    formData.get("destination_lng"),
+  );
+
+  const context = await getSessionContext();
+  if (!context) {
+    return NOT_LOGGED_IN;
+  }
+
+  // Promo diverifikasi ULANG di server dari kode yang dikirim client.
+  // Kelayakan loyalty dihitung dari database, bukan dari klaim client —
+  // sehingga mengarang `promo_code` tidak pernah menghasilkan ongkir gratis.
+  const promo = await resolveJastipPromo(formData.get("promo_code"), context.userId);
+
   // Ongkir dihitung ulang di server (sumber kebenaran) — nominal dari client
-  // tidak pernah dipercaya.
-  let shippingTotal: number;
+  // tidak pernah dipercaya. Surge cuaca (Open-Meteo) juga diambil di server;
+  // bila gagal dianggap 0 sehingga ongkir tidak pernah gagal karena jaringan.
+  let fee: JastipFeeResolution;
   try {
-    shippingTotal = calculateJastipShippingFee({
+    const weather = await fetchWeatherSurge();
+    const breakdown = calculateJastipShippingFee({
       distanceKm: parsed.data.distance_km,
-    }).total;
+      weatherSurge: weather.surge,
+    });
+
+    fee = applyJastipPromo(breakdown.total, promo);
   } catch (cause) {
     const message =
       cause instanceof JastipOutOfRangeError
@@ -104,10 +135,11 @@ export async function createJastipOrderAction(
     return { status: "error", message, fieldErrors: { distance_km: message } };
   }
 
-  const context = await getSessionContext();
-  if (!context) {
-    return NOT_LOGGED_IN;
-  }
+  // Bebas ongkir otomatis mulai pesanan ke-4 (tanpa kode promo): hitung dari
+  // database (bukan klaim client) lalu nol-kan ongkir bila eligible.
+  const pastOrderCount = await countPastOrdersForFreeShipping(context.userId);
+  const freeShipping = resolveFreeShippingStatus(pastOrderCount);
+  const shippingTotal = applyFreeShipping(fee.total, freeShipping.eligible);
 
   const { data, error } = await context.supabase
     .from("jastip_orders")
@@ -119,6 +151,12 @@ export async function createJastipOrderAction(
       pickup_location: buildJastipPickupLabel(parsed.data.whatsapp),
       dropoff_location: parsed.data.dropoff_location,
       delivery_tip: shippingTotal,
+      // Kode promo tersimpan agar pesanan bisa diaudit Tim Campify.
+      promo_code: promo?.code ?? null,
+      // Titik tujuan untuk peta navigasi driver di `/admin`. `null` bila
+      // pelanggan tidak mengizinkan GPS — TIDAK diisi koordinat default.
+      destination_lat: parsed.data.destination_lat,
+      destination_lng: parsed.data.destination_lng,
       status: "pending",
     })
     .select("*")
@@ -135,9 +173,18 @@ export async function createJastipOrderAction(
   }
 
   revalidatePath(JASTIP_PATH);
+  if (freeShipping.eligible) {
+    return {
+      status: "success",
+      message: `Titipan dibuat! 🎉 Gratis Ongkir (Pesanan Ke-${freeShipping.nextOrderNumber})`,
+      order: { ...(data as JastipOrder), delivery_tip: shippingTotal },
+    };
+  }
   return {
     status: "success",
-    message: `Titipan dibuat! Ongkir ${formatRupiah(shippingTotal)}`,
+    message: promo
+      ? `Titipan dibuat! Ongkir ${formatRupiah(shippingTotal)} (${promo.badge})`
+      : `Titipan dibuat! Ongkir ${formatRupiah(shippingTotal)}`,
     order: data as JastipOrder,
   };
 }

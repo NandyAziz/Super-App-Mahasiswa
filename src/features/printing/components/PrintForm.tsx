@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Image from "next/image";
 import type { ZodError } from "zod";
 import {
@@ -16,19 +16,54 @@ import {
   Plus,
   PrinterCheck,
   Upload,
+  Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
+import { formatRupiah } from "@/lib/format";
+import {
+  JASTIP_BASE_DISTANCE_KM,
+  JASTIP_EXTRA_PER_KM,
+} from "@/lib/pricing";
 import { cn } from "@/lib/utils";
 import { TextareaField } from "@/components/ui/TextareaField";
 import { TextField } from "@/components/ui/TextField";
+import { PromoBadge } from "@/features/promos/components/PromoBadge";
+import { FreeShippingBadge } from "@/features/orders/components/FreeShippingBadge";
+import { applyFreeShipping, type FreeShippingStatus } from "@/features/orders/free-shipping";
+import type { AppliedPromo } from "@/features/promos/catalog";
 import { createPrintOrderAction } from "../actions";
+import {
+  PRINT_DELIVERY_ZONE_HINT,
+  resolvePrintDeliveryEstimate,
+  type PrintDeliveryEstimate,
+} from "../delivery";
 import { printRequestSchema } from "../schemas";
 import { MAX_UPLOAD_BYTES, uploadPrintDocument } from "../upload";
 import type { PrintActionResult } from "../types";
+import { WeatherSurgeNotice } from "@/features/weather/components/WeatherSurgeNotice";
+import { CaptureLocationField } from "@/features/navigation/components/CaptureLocationField";
+import { requestCurrentPosition } from "@/features/navigation/geolocation";
+import type { DestinationCoords } from "@/features/orders/coordinates";
+import {
+  resolveSurgeValue,
+  useWeatherSurge,
+} from "@/features/weather/use-weather-surge";
 
 interface PrintFormProps {
   /** Dipanggil setelah pesanan cetak berhasil dibuat. */
   onSuccess?: () => void;
+  /**
+   * Promo yang sudah diverifikasi server (hasil parsing `?promo=` di halaman).
+   * Hanya KODE-nya yang dikirim — Server Action memverifikasi ulang.
+   */
+  appliedPromo?: AppliedPromo | null;
+  /** Status bebas ongkir otomatis; null bila belum terhitung. */
+  freeShipping?: FreeShippingStatus | null;
+}
+
+/** Total ongkir final: subtotal + 0 saat bebas ongkir aktif. */
+function toPrintFinalTotal(estimate: PrintDeliveryEstimate, eligible: boolean): number {
+  return applyFreeShipping(estimate.breakdown.total, eligible);
 }
 
 type SourceMode = "upload" | "link";
@@ -81,7 +116,65 @@ function PrintHero() {
   );
 }
 
-export function PrintForm({ onSuccess }: PrintFormProps) {
+/**
+ * Kartu rincian ongkir Jasa Cetak: tarif dasar, ekstra jarak, jam sibuk, dan
+ * total yang dibayar di muka. Zona hasil inferensi dari teks lokasi ikut
+ * ditampilkan agar asumsinya transparan bagi pemesan.
+ */
+function PrintFeeBreakdown({
+  estimate,
+  finalTotal,
+}: {
+  estimate: PrintDeliveryEstimate;
+  finalTotal: number;
+}) {
+  const { breakdown, zone, isEstimated } = estimate;
+
+  return (
+    <div className="space-y-1.5 rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4">
+      <div className="flex items-center justify-between text-[0.7rem] font-semibold uppercase tracking-wide text-indigo-500">
+        <span>Rincian Ongkir</span>
+        <span>
+          {zone.label} · ≈{zone.distanceKm} KM
+        </span>
+      </div>
+
+      <div className="flex items-center justify-between text-xs text-slate-600">
+        <span>Tarif dasar (0–{JASTIP_BASE_DISTANCE_KM} KM)</span>
+        <span>{formatRupiah(breakdown.baseFee)}</span>
+      </div>
+
+      {breakdown.extraKm > 0 ? (
+        <div className="flex items-center justify-between text-xs text-slate-600">
+          <span>
+            Tambahan {breakdown.extraKm} KM × {formatRupiah(JASTIP_EXTRA_PER_KM)}
+          </span>
+          <span>{formatRupiah(breakdown.extraFee)}</span>
+        </div>
+      ) : null}
+
+      {breakdown.isPeakHour ? (
+        <div className="flex items-center justify-between text-xs font-medium text-amber-600">
+          <span>Jam sibuk (+20%)</span>
+          <span>×{breakdown.peakMultiplier}</span>
+        </div>
+      ) : null}
+
+      <div className="mt-1 flex items-center justify-between border-t border-indigo-100 pt-2 text-sm font-bold text-slate-900">
+        <span>Ongkir Pengiriman</span>
+        <span>{formatRupiah(finalTotal)}</span>
+      </div>
+
+      <p className="text-[0.65rem] leading-relaxed text-slate-500">
+        {isEstimated
+          ? "Zona masih estimasi — tulis nama gedung/zona (mis. Gedung C atau Kost …) agar ongkir lebih akurat."
+          : PRINT_DELIVERY_ZONE_HINT}
+      </p>
+    </div>
+  );
+}
+
+export function PrintForm({ onSuccess, appliedPromo = null, freeShipping = null }: PrintFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -94,6 +187,20 @@ export function PrintForm({ onSuccess }: PrintFormProps) {
   const [whatsapp, setWhatsapp] = useState("");
   const [deliveryLocation, setDeliveryLocation] = useState("");
   const [customNote, setCustomNote] = useState("");
+  // Titik antar opsional untuk peta navigasi driver di `/admin`.
+  const [destination, setDestination] = useState<DestinationCoords | null>(null);
+
+  // Pratinjau ongkir — dihitung ulang dari teks yang sama di Server Action.
+  // Surge cuaca dari Open-Meteo ikut diterapkan agar preview = nilai tersimpan.
+  const weatherSurge = useWeatherSurge();
+  const weatherValue = resolveSurgeValue(weatherSurge);
+  const deliveryEstimate = useMemo(
+    () => resolvePrintDeliveryEstimate(deliveryLocation, weatherValue),
+    [deliveryLocation, weatherValue],
+  );
+  // Bebas ongkir otomatis menimpa ongkir zona: subtotal + 0 saat eligible.
+  const printFinalTotal = toPrintFinalTotal(deliveryEstimate, freeShipping?.eligible ?? false);
+  const printSavedAmount = deliveryEstimate.breakdown.total - printFinalTotal;
 
   function resetForm(): void {
     setFieldErrors({});
@@ -171,12 +278,30 @@ export function PrintForm({ onSuccess }: PrintFormProps) {
           return;
         }
 
+        // Koordinat tujuan: pakai yang sudah ada (auto-capture di form), bila
+        // belum ada coba ambil sekali lagi di sini sebelum submit. Tanpa
+        // fallback ini, `destination_*` terkirim kosong bila GPS belum selesai
+        // saat pelanggan menekan tombol.
+        const coords = destination ?? (await requestCurrentPosition());
+        if (coords) {
+          setDestination(coords);
+        }
+
         const formData = new FormData();
         formData.set("document_url", parsed.data.document_url);
         formData.set("copies", String(parsed.data.copies));
         formData.set("contact_whatsapp", parsed.data.contact_whatsapp);
         formData.set("delivery_location", parsed.data.delivery_location);
         formData.set("custom_note", parsed.data.custom_note);
+        // WAJIB: formData dibangun manual, jadi koordinat harus di-set eksplisit
+        // (hidden input TIDAK ikut terbaca). String kosong bila tidak tersedia.
+        formData.set("destination_lat", coords ? String(coords.lat) : "");
+        formData.set("destination_lng", coords ? String(coords.lng) : "");
+        // Hanya KODE promo yang dikirim. Nominal diskon & kelayakan tetap
+        // dihitung ulang di server — client tidak boleh menentukan harga.
+        if (appliedPromo) {
+          formData.set("promo_code", appliedPromo.code);
+        }
 
         applyResult(await createPrintOrderAction(formData));
       } catch (cause) {
@@ -192,6 +317,10 @@ export function PrintForm({ onSuccess }: PrintFormProps) {
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-4">
       <PrintHero />
+
+      {/* Promo tampil hanya bila sudah diverifikasi server. */}
+      <PromoBadge promo={appliedPromo} />
+      <FreeShippingBadge status={freeShipping} savedAmount={printSavedAmount} />
 
       <section className="space-y-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
         <div className="flex items-center gap-1.5">
@@ -286,7 +415,7 @@ export function PrintForm({ onSuccess }: PrintFormProps) {
           value={whatsapp}
           onChange={(event) => setWhatsapp(event.target.value)}
           error={fieldErrors.contact_whatsapp}
-          hint="Wajib diisi untuk konfirmasi pesanan & koordinasi mitra cetak"
+          hint="Wajib diisi untuk konfirmasi pesanan & koordinasi Tim Campify"
           disabled={isPending}
           required
         />
@@ -303,6 +432,25 @@ export function PrintForm({ onSuccess }: PrintFormProps) {
           disabled={isPending}
           required
         />
+
+        <CaptureLocationField
+          lat={destination?.lat ?? null}
+          lng={destination?.lng ?? null}
+          onChange={setDestination}
+          autoCaptureOnMount
+        />
+
+        <PrintFeeBreakdown estimate={deliveryEstimate} finalTotal={printFinalTotal} />
+
+        <WeatherSurgeNotice surge={weatherSurge} />
+
+        <p className="flex items-start gap-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-[0.7rem] leading-relaxed font-medium text-amber-700">
+          <Wallet className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            Biaya cetak dikonfirmasi Tim Campify via WhatsApp. Ongkir di atas
+            dibayar di muka saat pesanan dikonfirmasi.
+          </span>
+        </p>
       </section>
 
       <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">

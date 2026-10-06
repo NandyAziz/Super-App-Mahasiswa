@@ -16,6 +16,20 @@ export const ADMIN_SERVICE_FILTERS = [
 export type AdminServiceFilter = (typeof ADMIN_SERVICE_FILTERS)[number];
 
 /**
+ * Satu berkas pelanggan yang dilampirkan pada pesanan (dokumen cetak,
+ * brief proyek, bukti pembayaran, dsb). Dirender sebagai file chip
+ * interaktif yang membuka/mengunduh langsung dari Supabase Storage.
+ */
+export interface AdminOrderDocument {
+  /** Label siap tampil, mis. nama berkas. */
+  label: string;
+  /** URL publik berkas. */
+  url: string;
+  /** Jenis berkas untuk ikon & hint. */
+  kind: "document" | "payment-proof" | "attachment";
+}
+
+/**
  * Satu baris pesanan yang sudah dinormalisasi lintas 5 layanan untuk tabel
  * operator. Seluruh label sudah diformat di server agar render deterministik.
  */
@@ -24,6 +38,16 @@ export interface AdminOrder {
   service: OrderService;
   /** Nama lengkap pemesan dari tabel `public.profiles`. */
   customerName: string;
+  /**
+   * Nomor WhatsApp/telepon pelanggan bila tersedia di baris layanan
+   * (`print_orders.contact_whatsapp`, `WA ...` pada `pickup_location` /
+   * `description` / `notes`). `null` bila tidak tercantum.
+   */
+  contactPhone: string | null;
+  /** Alamat / lokasi antar bila ada (jastip & cetak). */
+  address: string | null;
+  /** Spesifikasi layanan (salinan, deadline, jadwal, instruksi, dsb). */
+  specification: string | null;
   /** Ringkasan detail layanan (item, dokumen, judul, dsb). */
   detail: string;
   /** Nominal tagihan dalam Rupiah; `null` bila layanan belum menetapkan tagihan. */
@@ -37,6 +61,20 @@ export interface AdminOrder {
   createdLabel: string;
   /** URL bukti pembayaran (manual QRIS); `null` bila belum diunggah. */
   paymentProofUrl: string | null;
+  /**
+   * URL dokumen yang perlu dicetak (hanya layanan cetak/akademik).
+   * `null` untuk layanan lain atau bila belum diunggah. Dipakai operator
+   * untuk membuka/mengunduh berkas di `/admin`.
+   */
+  documentUrl: string | null;
+  /** Seluruh lampiran pelanggan sebagai file chip interaktif. */
+  documents: AdminOrderDocument[];
+  /**
+   * Koordinat lokasi tujuan pelanggan untuk peta navigasi driver; `null` bila
+   * pemesan belum mengirim lokasi (kolom NULL di database).
+   */
+  destinationLat: number | null;
+  destinationLng: number | null;
 }
 
 /** Ringkasan operator lintas layanan untuk kartu overview. */

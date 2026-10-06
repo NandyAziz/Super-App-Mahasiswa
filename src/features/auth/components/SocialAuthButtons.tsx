@@ -4,11 +4,13 @@ import { useState, type MouseEvent } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
 import {
   DEFAULT_REDIRECT_PATH,
   OAUTH_CALLBACK_PATH,
   type OAuthProvider,
 } from "../constants";
+import { OAuthLoadingOverlay } from "./OAuthLoadingOverlay";
 
 const PROVIDER_LABEL: Record<OAuthProvider, string> = {
   google: "Google",
@@ -17,7 +19,7 @@ const PROVIDER_LABEL: Record<OAuthProvider, string> = {
 
 function GoogleIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
       <path
         fill="#4285F4"
         d="M23.5 12.3c0-.9-.1-1.5-.3-2.3H12v4.5h6.5c-.1 1.1-.8 2.7-2.4 3.8l-.1.1 3.5 2.7.2.1c2.2-2 3.4-5 3.4-8.9z"
@@ -40,36 +42,62 @@ function GoogleIcon() {
 
 function GitHubIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4 fill-slate-900" aria-hidden="true">
+    <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" aria-hidden="true">
       <path d="M12 .5C5.37.5 0 5.87 0 12.5c0 5.3 3.44 9.8 8.21 11.39.6.11.82-.26.82-.58 0-.29-.01-1.04-.02-2.05-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.07 1.84 2.81 1.31 3.5 1 .11-.78.42-1.31.76-1.61-2.67-.3-5.47-1.34-5.47-5.95 0-1.31.47-2.39 1.24-3.23-.13-.3-.54-1.53.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.65.25 2.88.12 3.18.77.84 1.24 1.92 1.24 3.23 0 4.62-2.81 5.64-5.49 5.94.43.37.81 1.1.81 2.22 0 1.6-.01 2.9-.01 3.29 0 .32.21.7.82.58A12.01 12.01 0 0 0 24 12.5C24 5.87 18.63.5 12 .5z" />
-    </svg>
-  );
-}
-
-function AppleIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4 fill-slate-900" aria-hidden="true">
-      <path d="M17.05 12.54c0-2.4 1.96-3.55 2.05-3.6-1.12-1.64-2.86-1.86-3.48-1.89-1.48-.15-2.89.87-3.64.87-.75 0-1.9-.85-3.13-.83-1.61.02-3.1.94-3.93 2.38-1.68 2.9-.43 7.2 1.2 9.56.8 1.16 1.76 2.46 3.02 2.41 1.21-.05 1.67-.78 3.13-.78s1.87.78 3.15.76c1.3-.02 2.12-1.18 2.91-2.35.92-1.34 1.3-2.64 1.32-2.71-.03-.01-2.54-.98-2.6-3.82zM14.16 4.06c.66-.8 1.1-1.91.98-3.02-.95.04-2.1.63-2.78 1.43-.61.7-1.15 1.83-1 2.9 1.06.08 2.14-.54 2.8-1.31z" />
     </svg>
   );
 }
 
 interface SocialAuthButtonsProps {
   mode: "login" | "register";
+  /**
+   * Tampilkan pemisah "atau" di atas tombol OAuth.
+   *
+   * Diset `true` saat ada kontrol lain di atasnya. Pada layar yang sudah punya
+   * judul seksi sendiri (mis. "Or Continue With" di `/login`), pemisah ini
+   * dihilangkan agar tidak ada garis menggantung. Diabaikan pada `layout`
+   * "inline" karena pemisah tidak muat di grid dua kolom.
+   */
+  showDivider?: boolean;
+  /**
+   * "stacked" (default) — tombol bertumpuk penuh lebar dengan label lengkap
+   * ("Masuk dengan Google").
+   *
+   * "inline" — dua tombol berdampingan dalam grid 2 kolom; label cukup nama
+   * penyedia karena judul seksi di atasnya sudah memberi konteks.
+   */
+  layout?: "stacked" | "inline";
 }
 
+const BUTTON_BASE =
+  "flex w-full items-center justify-center gap-2.5 rounded-2xl text-sm font-semibold shadow-sm transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60";
+const GOOGLE_BUTTON =
+  "border border-slate-200 bg-white text-slate-700 hover:border-indigo-300 hover:bg-indigo-50/50";
+const GITHUB_BUTTON =
+  "border border-slate-800 bg-slate-900 text-white hover:bg-slate-800";
+
 /**
- * Tombol social auth (Google, GitHub, Apple) gaya putih/border bersih.
- * Google & GitHub memicu `signInWithOAuth` SUPABASE (bukan Auth.js) sehingga
- * user langsung mendapat sesi Supabase yang sah untuk RLS `auth.uid()`;
- * Apple masih dinonaktifkan ("Mendatang") sampai kredensial tersedia.
+ * Tombol OAuth gaya kartu native (Google & GitHub saja).
+ *
+ * Keduanya memicu `signInWithOAuth` Supabase (bukan Auth.js) sehingga pengguna
+ * langsung mendapat sesi Supabase yang sah untuk RLS `auth.uid()`. Selagi
+ * proses berjalan, overlay "Memproses masuk..." ditampilkan agar tidak terasa
+ * seperti layar diam.
  */
-export function SocialAuthButtons({ mode }: SocialAuthButtonsProps) {
+export function SocialAuthButtons({
+  mode,
+  showDivider = true,
+  layout = "stacked",
+}: SocialAuthButtonsProps) {
   const [pendingProvider, setPendingProvider] = useState<OAuthProvider | null>(
     null,
   );
-  const dividerText =
-    mode === "login" ? "Atau masuk dengan" : "Atau daftar dengan";
+  const isLogin = mode === "login";
+  const isInline = layout === "inline";
+  const loadingLabel = isLogin ? "Memproses masuk..." : "Memproses daftar...";
+  const verb = isLogin ? "Masuk" : "Daftar";
+  /** Ukuran & padding berbeda: tombol inline lebih ringkas dari yang bertumpuk. */
+  const sizeClass = isInline ? "px-3 py-3" : "px-4 py-3.5";
 
   async function handleSignIn(
     event: MouseEvent<HTMLButtonElement>,
@@ -107,48 +135,56 @@ export function SocialAuthButtons({ mode }: SocialAuthButtonsProps) {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-3">
-        <span aria-hidden="true" className="h-px flex-1 bg-slate-200" />
-        <span className="text-xs text-slate-400">{dividerText}</span>
-        <span aria-hidden="true" className="h-px flex-1 bg-slate-200" />
-      </div>
+    <>
+      <div className={isInline ? "grid grid-cols-2 gap-3" : "space-y-3"}>
+        {showDivider && !isInline ? (
+          <div className="flex items-center gap-3">
+            <span aria-hidden="true" className="h-px flex-1 bg-slate-200" />
+            <span className="text-xs text-slate-400">atau</span>
+            <span aria-hidden="true" className="h-px flex-1 bg-slate-200" />
+          </div>
+        ) : null}
 
-      <div className="space-y-2">
         <button
           type="button"
           onClick={(event) => handleSignIn(event, "google")}
           disabled={pendingProvider !== null}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition-all duration-200 hover:border-indigo-300 hover:bg-indigo-50/50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+          aria-label={`${verb} dengan ${PROVIDER_LABEL.google}`}
+          className={cn(BUTTON_BASE, GOOGLE_BUTTON, sizeClass)}
         >
-          {pendingProvider === "google" ? <Loader2 className="h-4 w-4 animate-spin" /> : <GoogleIcon />}
-          <span>Lanjutkan dengan Google</span>
+          {pendingProvider === "google" ? (
+            <Loader2 className="h-5 w-5 animate-spin text-indigo-600" />
+          ) : (
+            <GoogleIcon />
+          )}
+          <span>
+            {isInline
+              ? PROVIDER_LABEL.google
+              : `${verb} dengan ${PROVIDER_LABEL.google}`}
+          </span>
         </button>
 
         <button
           type="button"
           onClick={(event) => handleSignIn(event, "github")}
           disabled={pendingProvider !== null}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition-all duration-200 hover:border-indigo-300 hover:bg-indigo-50/50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+          aria-label={`${verb} dengan ${PROVIDER_LABEL.github}`}
+          className={cn(BUTTON_BASE, GITHUB_BUTTON, sizeClass)}
         >
-          {pendingProvider === "github" ? <Loader2 className="h-4 w-4 animate-spin" /> : <GitHubIcon />}
-          <span>Lanjutkan dengan GitHub</span>
-        </button>
-
-        <button
-          type="button"
-          disabled
-          aria-disabled="true"
-          title="Apple Sign-In Mendatang"
-          className="relative flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-400 opacity-60 transition-all duration-200 disabled:cursor-not-allowed"
-        >
-          <AppleIcon />
-          <span>Lanjutkan dengan Apple</span>
-          <span className="absolute right-3 rounded-full bg-amber-100 px-2 py-0.5 text-[0.65rem] font-semibold text-amber-700">
-            Mendatang
+          {pendingProvider === "github" ? (
+            <Loader2 className="h-5 w-5 animate-spin" />
+          ) : (
+            <GitHubIcon />
+          )}
+          <span>
+            {isInline
+              ? PROVIDER_LABEL.github
+              : `${verb} dengan ${PROVIDER_LABEL.github}`}
           </span>
         </button>
       </div>
-    </div>
+
+      <OAuthLoadingOverlay open={pendingProvider !== null} label={loadingLabel} />
+    </>
   );
 }

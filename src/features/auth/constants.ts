@@ -3,7 +3,12 @@
  * Tidak memuat rahasia apa pun sehingga bebas diimpor Client Component.
  */
 
-/** Halaman default aplikasi setelah autentikasi berhasil (dashboard / home). */
+/** Tautan pemulihan kata sandi Supabase yang menunjuk kembali ke aplikasi. */
+export const RESET_PASSWORD_PATH = "/reset-password";
+
+/**
+ * Halaman default aplikasi setelah autentikasi berhasil (dashboard / home).
+ */
 export const DEFAULT_REDIRECT_PATH = "/";
 
 /**

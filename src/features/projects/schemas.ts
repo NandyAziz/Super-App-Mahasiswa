@@ -18,6 +18,28 @@ export const whatsappSchema = z
     "Nomor WhatsApp tidak valid (contoh: 08123456789)",
   );
 
+/**
+ * `tech_stack` adalah kolom `text[] not null` di `coding_projects`, tetapi
+ * selector teknologi sudah dihapus dari form pengajuan sehingga field ini sering
+ * tidak ikut terkirim. Normalkan nilai apa pun — termasuk ketika hilang
+ * (`null`/`undefined`) — menjadi `string[]` dengan default `[]` agar INSERT
+ * tidak pernah melanggar constraint not-null.
+ */
+function normalizeTechStack(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === "string");
+  }
+
+  if (typeof value === "string" && value.trim() !== "") {
+    return value
+      .split(",")
+      .map((item) => item.trim())
+      .filter((item) => item !== "");
+  }
+
+  return [];
+}
+
 export const createProjectSchema = z.object({
   title: z.string().trim().min(5, "Judul proyek minimal 5 karakter"),
   // Deskripsi dibangun dari instruksi + metadata (deadline, kontak, lampiran)
@@ -26,6 +48,8 @@ export const createProjectSchema = z.object({
   budget: z.coerce
     .number()
     .min(MIN_PROJECT_BUDGET, `Budget minimal ${MIN_BUDGET_LABEL}`),
+  // Wajib ada di payload (default `[]`) — jangan andalkan default database.
+  tech_stack: z.preprocess(normalizeTechStack, z.array(z.string())),
 });
 
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;

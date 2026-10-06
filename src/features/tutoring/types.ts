@@ -36,6 +36,14 @@ export interface TutoringSession {
   price: number;
   status: TutoringStatus;
   created_at: string;
+  /**
+   * Nama lengkap pemesan (student) & tutor dari `public.profiles`.
+   * Di-resolve terpisah oleh `getTutoringSessionsAction` karena FK tabel ini
+   * menunjuk `auth.users`, bukan `profiles`, sehingga tidak bisa di-embed.
+   * `null` bila profil belum ada atau lookup gagal (UI menampilkan fallback).
+   */
+  student_name?: string | null;
+  tutor_name?: string | null;
 }
 
 export interface TutoringActionResult {

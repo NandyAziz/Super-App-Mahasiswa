@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PRINT_DELIVERY_FEE_CAP } from "./delivery";
 import { PRINT_PROGRESS_STATUSES } from "./types";
 
 /**
@@ -13,6 +14,12 @@ export const whatsappSchema = z
     "Nomor WhatsApp tidak valid (contoh: 08123456789)",
   );
 
+import {
+  destinationLatSchema,
+  destinationLngSchema,
+  optionalCoordinateSchema,
+} from "@/features/orders/coordinates";
+
 /** Catatan bebas; string kosong dipetakan ke `null` agar bersih di database. */
 const customNoteField = z
   .string()
@@ -21,9 +28,23 @@ const customNoteField = z
   .transform((value) => (value.length > 0 ? value : null));
 
 /**
+ * Ongkir pengiriman. Bukan input pengguna: Server Action menghitung ulang
+ * nilai ini dari `delivery_location` (lihat `resolvePrintDeliveryEstimate`)
+ * sehingga nominal yang dipersist tidak bisa dimanipulasi dari client.
+ */
+const deliveryFeeField = z.coerce
+  .number()
+  .int("Ongkir harus berupa bilangan bulat")
+  .min(0, "Ongkir tidak boleh negatif")
+  .max(PRINT_DELIVERY_FEE_CAP, "Ongkir melebihi batas wajar");
+
+/**
  * Payload Server Action "Jasa Cetak". Hanya memuat input esensial — opsi cetak
  * kompleks (warna, ukuran kertas, sisi, finishing, jumlah halaman) dihapus dan
  * diserahkan ke mitra cetak, sehingga kolom terkait memakai default database.
+ *
+ * `delivery_fee` diisi dari hasil hitungan server (bukan dari form) dan ikut
+ * divalidasi di sini sebelum dipersist.
  */
 export const createPrintOrderSchema = z.object({
   document_url: z.url("Link dokumen tidak valid (contoh: https://...)"),
@@ -37,7 +58,17 @@ export const createPrintOrderSchema = z.object({
     .string()
     .trim()
     .min(3, "Lokasi antar minimal 3 karakter"),
+  /**
+   * Koordinat titik antar (WGS84) — OPSIONAL.
+   *
+   * Field kosong (pemesan tidak memakai GPS) dinormalisasi menjadi `null`
+   * supaya pesanan tetap bisa dibuat tanpa lokasi. Nilai yang terisi wajib
+   * berada di rentang geografis yang sah.
+   */
+  destination_lat: optionalCoordinateSchema(destinationLatSchema, "Latitude"),
+  destination_lng: optionalCoordinateSchema(destinationLngSchema, "Longitude"),
   custom_note: customNoteField,
+  delivery_fee: deliveryFeeField,
 });
 
 export type CreatePrintOrderInput = z.infer<typeof createPrintOrderSchema>;

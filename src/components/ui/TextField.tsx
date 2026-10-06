@@ -8,6 +8,12 @@ interface TextFieldProps
   prefix?: string;
   error?: string | null;
   hint?: string;
+  /**
+   * Elemen opsional di sisi kanan input (mis. tombol lihat/sembunyikan kata
+   * sandi). Bila diisi, padding kanan input otomatis ditambah agar teks tidak
+   * tertutup oleh elemen tersebut.
+   */
+  trailing?: React.ReactNode;
 }
 
 /**
@@ -20,11 +26,13 @@ export function TextField({
   prefix,
   error,
   hint,
+  trailing,
   id,
   className,
   ...props
 }: TextFieldProps) {
   const hasAdornment = Boolean(Icon) || Boolean(prefix);
+  const hasTrailing = Boolean(trailing);
 
   return (
     <div className="space-y-1.5">
@@ -46,9 +54,10 @@ export function TextField({
           id={id}
           aria-invalid={Boolean(error)}
           className={cn(
-            "w-full rounded-xl border bg-white py-3 pr-3 text-sm text-slate-900",
+            "w-full rounded-xl border bg-white py-3 text-sm text-slate-900",
             "placeholder:text-slate-400 outline-none transition-all duration-150 focus:ring-2",
             hasAdornment ? "pl-10" : "pl-3",
+            hasTrailing ? "pr-11" : "pr-3",
             error
               ? "border-red-300 focus:border-transparent focus:ring-2 focus:ring-red-200"
               : "border-slate-200 focus:border-transparent focus:ring-2 focus:ring-indigo-600",
@@ -56,6 +65,12 @@ export function TextField({
           )}
           {...props}
         />
+
+        {hasTrailing ? (
+          <span className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center">
+            {trailing}
+          </span>
+        ) : null}
       </div>
 
       {error ? (

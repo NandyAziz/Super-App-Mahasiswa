@@ -1,11 +1,23 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import type { ZodError } from "zod";
 import { ensureUserProfile } from "@/features/profile/ensure";
+import { resolveRequestOrigin } from "@/lib/app-url";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { loginSchema, registerSchema } from "./schemas";
+import {
+  OAUTH_CALLBACK_PATH,
+  RESET_PASSWORD_PATH,
+} from "./constants";
+import {
+  forgotPasswordSchema,
+  loginSchema,
+  parseLoginIdentifier,
+  registerSchema,
+  resetPasswordSchema,
+} from "./schemas";
 import type { AuthActionResult } from "./types";
 
 type SupabaseServerClient = Awaited<
@@ -148,29 +160,63 @@ function mapUnknownError(error: unknown): string {
   return "Terjadi gangguan koneksi. Silakan coba lagi.";
 }
 
+/**
+ * Masuk dengan email ATAU nomor HP, satu kolom identitas + kata sandi.
+ *
+ * Identitas tunggal dipecah menjadi kredensial Supabase yang tepat
+ * (`signInWithPassword({ email })` atau `{ phone }`). Nomor HP memerlukan
+ * provider Phone aktif di dashboard Supabase.
+ *
+ * `remember` (checkbox "Keep me signed in") menentukan apakah cookie sesi
+ * ditulis sebagai cookie persisten atau session cookie — lihat
+ * `createSupabaseServerClient({ persistSession })`.
+ */
 export async function loginAction(
   formData: FormData,
 ): Promise<AuthActionResult> {
   const parsed = loginSchema.safeParse({
-    email: formData.get("email"),
+    identifier: formData.get("identifier"),
     password: formData.get("password"),
+    remember: formData.get("remember") === "on",
   });
 
   if (!parsed.success) {
     return {
       status: "error",
-      message: "Periksa kembali email dan password Anda.",
+      message: "Periksa kembali email/nomor HP dan kata sandi Anda.",
       fieldErrors: toFieldErrors(parsed.error),
     };
   }
 
+  const identifier = parseLoginIdentifier(parsed.data.identifier);
+  if (!identifier) {
+    // Tidak dapat terjadi: `loginSchema` sudah menolak identitas tak dikenal.
+    return {
+      status: "error",
+      message: "Masukkan email atau nomor HP yang valid.",
+    };
+  }
+
+  const credentials =
+    identifier.kind === "email"
+      ? { email: identifier.email, password: parsed.data.password }
+      : { phone: identifier.phone, password: parsed.data.password };
+
   try {
-    const supabase = await createSupabaseServerClient();
-    const { error } = await supabase.auth.signInWithPassword(parsed.data);
+    const supabase = await createSupabaseServerClient({
+      persistSession: parsed.data.remember,
+    });
+    const { data, error } =
+      await supabase.auth.signInWithPassword(credentials);
 
     if (error) {
       logAuthError("login.signInWithPassword", error);
       return { status: "error", message: mapAuthError(error.message) };
+    }
+
+    // Best-effort: pastikan baris profil ada agar FK tabel pesanan aman.
+    if (data.user) {
+      await ensureUserProfile(supabase, data.user);
     }
 
     return {
@@ -183,14 +229,140 @@ export async function loginAction(
   }
 }
 
+/**
+ * Origin aplikasi dari header request saat ini (untuk Server Action yang perlu
+ * membangun URL absolut, mis. `redirectTo` email pemulihan kata sandi).
+ */
+async function resolveActionOrigin(): Promise<string> {
+  const headerList = await headers();
+  const host = headerList.get("host") ?? "localhost";
+  const request = new Request(`http://${host}`, {
+    headers: new Headers(headerList),
+  });
+
+  return resolveRequestOrigin(request);
+}
+
+/**
+ * Mengirim tautan atur ulang kata sandi ke email pengguna.
+ *
+ * `redirectTo` diarahkan ke callback milik aplikasi agar `?code` PKCE ditukar
+ * menjadi sesi, lalu pengguna mendarat di `/reset-password`.
+ *
+ * Untuk email yang BELUM terdaftar, Supabase tetap membalas sukses (perilaku
+ * bawaannya) sehingga halaman ini tidak dapat dipakai menebak email mana yang
+ * punya akun — pesan sukses karena itu sengaja berbunyi "bila email tersebut
+ * terdaftar".
+ */
+export async function requestPasswordResetAction(
+  formData: FormData,
+): Promise<AuthActionResult> {
+  const parsed = forgotPasswordSchema.safeParse({
+    email: formData.get("email"),
+  });
+
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: "Periksa kembali email Anda.",
+      fieldErrors: toFieldErrors(parsed.error),
+    };
+  }
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const origin = await resolveActionOrigin();
+    const { error } = await supabase.auth.resetPasswordForEmail(
+      parsed.data.email,
+      {
+        redirectTo: `${origin}${OAUTH_CALLBACK_PATH}?next=${RESET_PASSWORD_PATH}`,
+      },
+    );
+
+    if (error) {
+      logAuthError("reset.resetPasswordForEmail", error);
+      return { status: "error", message: mapAuthError(error.message) };
+    }
+
+    return {
+      status: "success",
+      message:
+        "Bila email tersebut terdaftar, tautan atur ulang kata sandi sudah dikirim. Cek kotak masuk emailmu.",
+    };
+  } catch (error) {
+    return { status: "error", message: mapUnknownError(error) };
+  }
+}
+
+/**
+ * Menetapkan kata sandi baru setelah tautan pemulihan membuka sesi.
+ *
+ * Wajib memiliki sesi aktif sehingga tidak dapat dipakai tanpa bukti
+ * kepemilikan email.
+ */
+export async function updatePasswordAction(
+  formData: FormData,
+): Promise<AuthActionResult> {
+  const parsed = resetPasswordSchema.safeParse({
+    password: formData.get("password"),
+    confirm: formData.get("confirm"),
+  });
+
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: "Periksa kembali kata sandi Anda.",
+      fieldErrors: toFieldErrors(parsed.error),
+    };
+  }
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data, error } = await supabase.auth.getUser();
+
+    if (error || !data.user) {
+      return {
+        status: "error",
+        message:
+          "Sesi pemulihan tidak ditemukan. Buka kembali tautan dari email Anda.",
+      };
+    }
+
+    const { error: updateError } = await supabase.auth.updateUser({
+      password: parsed.data.password,
+    });
+
+    if (updateError) {
+      logAuthError("reset.updateUser", updateError);
+      return { status: "error", message: mapAuthError(updateError.message) };
+    }
+
+    return {
+      status: "success",
+      message: "Kata sandi berhasil diperbarui. Selamat datang kembali! 🎉",
+      redirectTo: "/",
+    };
+  } catch (error) {
+    return { status: "error", message: mapUnknownError(error) };
+  }
+}
+
+/**
+ * Membuat akun baru dengan email ATAU nomor HP + kata sandi.
+ *
+ * `full_name`/`university` tidak lagi dikirim sebagai metadata karena form
+ * tidak memintanya: trigger database `handle_new_user` mengisi default
+ * 'Mahasiswa'/'Kampus' sehingga baris `public.profiles` tetap terbuat.
+ *
+ * Nomor HP memerlukan provider Phone aktif di dashboard Supabase.
+ */
 export async function registerAction(
   formData: FormData,
 ): Promise<AuthActionResult> {
   const parsed = registerSchema.safeParse({
-    full_name: formData.get("full_name"),
-    university: formData.get("university"),
-    email: formData.get("email"),
+    identifier: formData.get("identifier"),
     password: formData.get("password"),
+    confirm: formData.get("confirm"),
   });
 
   if (!parsed.success) {
@@ -201,31 +373,41 @@ export async function registerAction(
     };
   }
 
-  const { email, password, full_name, university } = parsed.data;
+  const identifier = parseLoginIdentifier(parsed.data.identifier);
+  if (!identifier) {
+    // Tidak dapat terjadi: `registerSchema` sudah menolak identitas tak dikenal.
+    return {
+      status: "error",
+      message: "Masukkan email atau nomor HP yang valid.",
+    };
+  }
+
+  const credentials =
+    identifier.kind === "email"
+      ? { email: identifier.email, password: parsed.data.password }
+      : { phone: identifier.phone, password: parsed.data.password };
 
   try {
     const supabase = await createSupabaseServerClient();
-
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { full_name, university } },
-    });
+    const { data, error } = await supabase.auth.signUp(credentials);
 
     if (error) {
       logAuthError("register.signUp", error);
       return { status: "error", message: mapAuthError(error.message) };
     }
 
-    // Email confirmation aktif: profil dibuat setelah verifikasi email.
+    // Konfirmasi email/SMS masih aktif: belum ada sesi sampai diverifikasi.
     if (!data.session || !data.user) {
       return {
         status: "success",
-        message: "Pendaftaran berhasil! Cek email Anda untuk verifikasi.",
+        message:
+          identifier.kind === "phone"
+            ? "Pendaftaran berhasil! Cek SMS untuk kode verifikasi."
+            : "Pendaftaran berhasil! Cek email Anda untuk verifikasi.",
       };
     }
 
-    // Sesi sudah aktif: pastikan baris profil dibuat agar FK pesanan tidak gagal.
+    // Sesi sudah aktif: pastikan baris profil ada agar FK pesanan tidak gagal.
     await syncProfileAfterSignup(supabase, data.user);
 
     return {

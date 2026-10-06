@@ -23,6 +23,19 @@ body {
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial,
     Helvetica, sans-serif;
   -webkit-tap-highlight-color: transparent;
+
+  /*
+   * Rasa aplikasi native: hilangkan pantulan scroll (rubber-band) di iOS &
+   * Android. Tanpa ini, halaman ikut "terlepas" saat pengguna menarik ujung
+   * daftar — padahal aplikasi asli tidak pernah begitu.
+   */
+  overscroll-behavior-y: none;
+}
+
+html {
+  /* Latar ikut diwarnai agar area overscroll tidak menampilkan putih polos. */
+  background: var(--background);
+  overscroll-behavior: none;
 }
 
 /* Menyembunyikan scrollbar pada carousel horizontal (swipe tetap aktif). */
@@ -32,5 +45,81 @@ body {
 
   &::-webkit-scrollbar {
     display: none;
+  }
+}
+
+/*
+ * Di layar HP, scrollbar desktop tidak pernah dipakai aplikasi asli.
+ * Disembunyikan DI VIEWPORT KECIL saja agar desktop tetap bisa di-scroll
+ * dengan penanda visual yang jelas.
+ */
+@media (max-width: 767px) {
+  html,
+  body {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/*
+ * Area aman perangkat (notch & home indicator) untuk mode standalone.
+ * Dipakai elemen yang menempel di tepi layar, mis. BottomNav.
+ */
+@utility pb-safe {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+/*
+ * Sapuan kilau (shimmer) pada tombol CTA "Pesan Sekarang".
+ * Dipicu lewat `group-hover/cta:animate-[shimmer-sweep_...]` sehingga hanya
+ * berjalan saat hover/fokus — bukan loop terus-menerus.
+ */
+@keyframes shimmer-sweep {
+  from {
+    transform: translateX(0) skewX(-12deg);
+  }
+  to {
+    transform: translateX(600%) skewX(-12deg);
+  }
+}
+
+/*
+ * Reveal halus saat konten dashboard pertama kali tampil — memberi kesan
+ * "aplikasi terbuka" setelah pengguna berhasil masuk, bukan halaman yang
+ * muncul mendadak.
+ *
+ * Sengaja memakai CSS (bukan style inline) agar aman dari hydration mismatch:
+ * nama kelasnya sama di server & client, dan animasinya cukup dijalankan
+ * browser pada paint pertama.
+ */
+@keyframes campify-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Kelas siap pakai untuk reveal konten (dipasang di layout dashboard). */
+@utility animate-reveal {
+  animation: campify-fade-in 0.45s ease-out both;
+}
+
+/* Hormati preferensi pengguna yang mengurangi gerakan. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-\[shimmer-sweep_1\.1s_ease-in-out_forwards\] {
+    animation: none;
+  }
+
+  .animate-reveal {
+    animation: none;
   }
 }

@@ -15,6 +15,8 @@ export const ORDER_STATUSES = [
   "PENDING_VERIFICATION",
   "accepted",
   "in_progress",
+  /** Kurir/operator sedang mengantar — memicu peta live tracking. */
+  "out_for_delivery",
   "completed",
   "cancelled",
   /** Sudah diverifikasi & lunas (manual QRIS). */
@@ -29,6 +31,7 @@ export const ORDER_RUNNING_STATUSES: readonly OrderStatus[] = [
   "PENDING_VERIFICATION",
   "accepted",
   "in_progress",
+  "out_for_delivery",
 ];
 
 /** Peran user pada sebuah transaksi: pemesan (owner) atau partner (kurir/tutor/freelancer). */
@@ -50,6 +53,12 @@ export interface OrderSummary {
   createdAt: string;
   /** Waktu relatif siap tampil, mis. "3 jam lalu". */
   createdLabel: string;
+  /**
+   * URL dokumen milik pengguna (berkas cetak / dokumen akademik).
+   * `null` bila tidak berlaku atau belum diunggah. Dipakai untuk tautan
+   * lihat/unduh di `/orders`.
+   */
+  documentUrl: string | null;
   /** Nominal tagihan dalam Rupiah; `null` bila layanan belum menetapkan tagihan. */
   amount: number | null;
 }

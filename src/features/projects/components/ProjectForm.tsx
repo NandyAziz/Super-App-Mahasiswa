@@ -107,8 +107,43 @@ export function ProjectForm({ onSuccess }: ProjectFormProps) {
     setWhatsapp("");
   }
 
+  /**
+   * Validasi ulang SATU field terhadap skema saat nilainya berubah, lalu
+   * perbarui `fieldErrors`. Pesan error lama (mis. "Instruksi minimal 10
+   * karakter") langsung hilang begitu nilai menjadi valid — tanpa menyentuh
+   * field lain sehingga tidak membanjiri form yang belum disentuh.
+   */
+  function revalidateField(
+    key: keyof typeof projectRequestSchema.shape,
+    value: unknown,
+  ): void {
+    const result = projectRequestSchema.shape[key].safeParse(value);
+    const message = result.success ? undefined : result.error.issues[0]?.message;
+
+    setFieldErrors((prev) => {
+      const current = prev[key];
+      if (current === message) return prev;
+      if (message !== undefined) return { ...prev, [key]: message };
+      if (current === undefined) return prev;
+      return Object.fromEntries(
+        Object.entries(prev).filter(([entryKey]) => entryKey !== key),
+      );
+    });
+  }
+
+  /** Ganti mode lampiran sambil me-reset validasi `attachment_url`. */
+  function handleModeChange(next: AttachmentMode): void {
+    setMode(next);
+    // Mode unggah tidak memakai link ("" = tidak ada link = valid),
+    // mode link memakai isi teks `link`.
+    revalidateField("attachment_url", next === "link" ? link : "");
+  }
+
   function handleBudgetChange(event: React.ChangeEvent<HTMLInputElement>): void {
-    setBudget(event.target.value === "" ? 0 : Number(event.target.value));
+    const nextBudget =
+      event.target.value === "" ? 0 : Number(event.target.value);
+    setBudget(nextBudget);
+    revalidateField("budget", nextBudget);
   }
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>): void {
@@ -215,7 +250,10 @@ export function ProjectForm({ onSuccess }: ProjectFormProps) {
           placeholder="Landing Page Himpunan"
           icon={Rocket}
           value={title}
-          onChange={(event) => setTitle(event.target.value)}
+          onChange={(event) => {
+            setTitle(event.target.value);
+            revalidateField("title", event.target.value);
+          }}
           error={fieldErrors.title}
           disabled={isPending}
           required
@@ -228,7 +266,10 @@ export function ProjectForm({ onSuccess }: ProjectFormProps) {
           label="Deadline"
           icon={CalendarClock}
           value={deadline}
-          onChange={(event) => setDeadline(event.target.value)}
+          onChange={(event) => {
+            setDeadline(event.target.value);
+            revalidateField("deadline", event.target.value);
+          }}
           error={fieldErrors.deadline}
           disabled={isPending}
           required
@@ -240,6 +281,11 @@ export function ProjectForm({ onSuccess }: ProjectFormProps) {
           rows={4}
           label="Instruksi"
           placeholder="Jelaskan detail tugas, fitur, referensi, atau error yang ditemukan..."
+          value={instructions}
+          onChange={(event) => {
+            setInstructions(event.target.value);
+            revalidateField("instructions", event.target.value);
+          }}
           error={fieldErrors.instructions}
           disabled={isPending}
           required
@@ -261,7 +307,7 @@ export function ProjectForm({ onSuccess }: ProjectFormProps) {
               <button
                 key={tab.value}
                 type="button"
-                onClick={() => setMode(tab.value)}
+                onClick={() => handleModeChange(tab.value)}
                 aria-pressed={mode === tab.value}
                 disabled={isPending}
                 className={cn(
@@ -306,7 +352,10 @@ export function ProjectForm({ onSuccess }: ProjectFormProps) {
             placeholder="https://drive.google.com / github.com / figma.com"
             icon={Link2}
             value={link}
-            onChange={(event) => setLink(event.target.value)}
+            onChange={(event) => {
+              setLink(event.target.value);
+              revalidateField("attachment_url", event.target.value);
+            }}
             error={fieldErrors.attachment_url}
             disabled={isPending}
             hint="Google Drive, GitHub, atau Figma"
@@ -329,7 +378,10 @@ export function ProjectForm({ onSuccess }: ProjectFormProps) {
           placeholder="08123456789"
           icon={Phone}
           value={whatsapp}
-          onChange={(event) => setWhatsapp(event.target.value)}
+          onChange={(event) => {
+            setWhatsapp(event.target.value);
+            revalidateField("whatsapp", event.target.value);
+          }}
           error={fieldErrors.whatsapp}
           hint="Wajib diisi untuk koordinasi teknis & konfirmasi pengerjaan"
           disabled={isPending}
@@ -357,7 +409,10 @@ export function ProjectForm({ onSuccess }: ProjectFormProps) {
             <button
               key={preset}
               type="button"
-              onClick={() => setBudget(preset)}
+              onClick={() => {
+                setBudget(preset);
+                revalidateField("budget", preset);
+              }}
               disabled={isPending}
               className={cn(
                 "rounded-full border px-3 py-1 text-[0.7rem] font-medium transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60",

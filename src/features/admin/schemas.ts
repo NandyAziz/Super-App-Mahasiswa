@@ -22,3 +22,14 @@ export const confirmOrderPaymentSchema = z.object({
 export type ConfirmOrderPaymentInput = z.infer<
   typeof confirmOrderPaymentSchema
 >;
+
+/**
+ * Validasi input Server Action penghapusan permanen pesanan oleh operator.
+ * Status asal tidak dikirim client — dibaca ulang & divalidasi di server.
+ */
+export const deleteAdminOrderSchema = z.object({
+  service: z.enum(ORDER_SERVICES),
+  orderId: z.string().trim().min(1, "ID pesanan tidak valid"),
+});
+
+export type DeleteAdminOrderInput = z.infer<typeof deleteAdminOrderSchema>;

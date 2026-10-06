@@ -1,3 +1,5 @@
+import type { PromoCode } from "@/features/promos/catalog";
+
 export const JASTIP_STATUSES = [
   "pending",
   "accepted",
@@ -31,6 +33,11 @@ export interface JastipOrder {
   pickup_location: string;
   dropoff_location: string;
   delivery_tip: number;
+  /**
+   * Kode promo yang dipakai titipan ini (jika ada), sudah diverifikasi server.
+   * `LOYALTY3RD` → `delivery_tip` sudah 0; `PATUNGAN` → ongkir flat.
+   */
+  promo_code: PromoCode | null;
   status: JastipStatus;
   created_at: string;
 }

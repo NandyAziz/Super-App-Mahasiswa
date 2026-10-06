@@ -30,6 +30,18 @@ export async function uploadAcademicDocument(file: File): Promise<string> {
     .upload(path, file, { cacheControl: "3600", upsert: false });
 
   if (error) {
+    console.error("[Academic] Upload Storage gagal:", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      bucket: ACADEMIC_STORAGE_BUCKET,
+      path,
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type,
+    });
+
     throw new Error(
       mapDatabaseError(
         error.message,

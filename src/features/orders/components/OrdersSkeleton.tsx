@@ -13,7 +13,7 @@ export function OrdersSkeleton() {
         {[0, 1, 2].map((index) => (
           <div
             key={index}
-            className="rounded-3xl border border-white/20 bg-white/70 p-4 backdrop-blur-md"
+            className="rounded-2xl border border-white/20 bg-white/70 p-4 backdrop-blur-md"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">

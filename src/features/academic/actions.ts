@@ -6,6 +6,11 @@ import { ensureUserProfile } from "@/features/profile/ensure";
 import { mapDatabaseError } from "@/lib/supabase/errors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
+  canCancelOrder,
+  ORDER_CANCEL_BLOCKED_MESSAGE,
+} from "@/features/orders/cancellation";
+import type { OrderStatus } from "@/features/orders/types";
+import {
   createAcademicServiceSchema,
   updateAcademicStatusSchema,
 } from "./schemas";
@@ -91,6 +96,15 @@ export async function createAcademicServiceAction(
   });
 
   if (error) {
+    console.error("[Academic] INSERT gagal:", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      userId: context.userId,
+      serviceType: parsed.data.service_type,
+    });
+
     return {
       status: "error",
       message: mapDatabaseError(
@@ -138,13 +152,67 @@ export async function updateAcademicStatusAction(
     return SESSION_EXPIRED;
   }
 
-  const { error } = await context.supabase
+  // Pembatalan hanya sah saat pesanan masih `pending`. Status dibaca ulang dari
+  // database (tidak pernah dipercaya dari client).
+  if (parsed.data.status === "cancelled") {
+    const { data: current, error: readError } = await context.supabase
+      .from("academic_services")
+      .select("status")
+      .eq("id", parsed.data.serviceId)
+      .maybeSingle();
+
+    if (readError) {
+      console.error("[Academic] Gagal membaca status saat pembatalan:", {
+        code: readError.code,
+        message: readError.message,
+        details: readError.details,
+        hint: readError.hint,
+        serviceId: parsed.data.serviceId,
+      });
+
+      return {
+        status: "error",
+        message: mapDatabaseError(
+          readError.message,
+          "Gagal memeriksa status pengajuan. Silakan coba lagi.",
+        ),
+      };
+    }
+
+    if (!current) {
+      return { status: "error", message: "Pesanan tidak ditemukan." };
+    }
+
+    if (!canCancelOrder(current.status as OrderStatus)) {
+      return { status: "error", message: ORDER_CANCEL_BLOCKED_MESSAGE };
+    }
+  }
+
+  let query = context.supabase
     .from("academic_services")
     .update({ status: parsed.data.status })
     .eq("id", parsed.data.serviceId)
     .eq("user_id", context.userId);
 
+  // Penjaga atomik: mencegah pembatalan bila status berubah menjadi bukan
+  // `pending` di antara pemeriksaan di atas dan UPDATE ini.
+  if (parsed.data.status === "cancelled") {
+    query = query.eq("status", "pending");
+  }
+
+  const { error } = await query;
+
   if (error) {
+    console.error("[Academic] UPDATE status gagal:", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      serviceId: parsed.data.serviceId,
+      nextStatus: parsed.data.status,
+      userId: context.userId,
+    });
+
     return {
       status: "error",
       message: mapDatabaseError(

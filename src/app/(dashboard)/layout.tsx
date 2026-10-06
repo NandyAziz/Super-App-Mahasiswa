@@ -8,7 +8,12 @@ export default function DashboardLayout({
   return (
     <div className="flex min-h-screen w-full flex-col bg-slate-50/50">
       <MobileFrame className="flex-1 bg-slate-50/50">
-        <main className="flex flex-1 flex-col">{children}</main>
+        {/*
+          `animate-reveal` memudarkan konten masuk dengan halus saat dashboard
+          pertama tampil — termasuk momen kembali dari login OAuth, sehingga
+          perpindahan ke `/` terasa mulus seperti aplikasi native.
+        */}
+        <main className="animate-reveal flex flex-1 flex-col">{children}</main>
       </MobileFrame>
       <BottomNav />
       <WalkthroughModal />

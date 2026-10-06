@@ -210,6 +210,40 @@ export function AcademicForm({ onSuccess }: AcademicFormProps) {
     setInstructions("");
   }
 
+  /**
+   * Validasi ulang SATU field terhadap skema saat nilainya berubah, lalu
+   * perbarui `fieldErrors`. Pesan error lama (mis. "Instruksi minimal 10
+   * karakter") langsung hilang begitu nilai menjadi valid — tanpa menyentuh
+   * field lain sehingga tidak membanjiri form yang belum disentuh.
+   */
+  function revalidateField(
+    key: keyof typeof academicRequestSchema.shape,
+    value: unknown,
+  ): void {
+    const result = academicRequestSchema.shape[key].safeParse(value);
+    const message = result.success ? undefined : result.error.issues[0]?.message;
+
+    setFieldErrors((prev) => {
+      const current = prev[key];
+      if (current === message) return prev;
+      if (message !== undefined) return { ...prev, [key]: message };
+      if (current === undefined) return prev;
+      return Object.fromEntries(
+        Object.entries(prev).filter(([entryKey]) => entryKey !== key),
+      );
+    });
+  }
+
+  /** Hapus error satu field saat konteksnya berubah (mis. ganti mode lampiran). */
+  function clearFieldError(key: string): void {
+    setFieldErrors((prev) => {
+      if (!(key in prev)) return prev;
+      return Object.fromEntries(
+        Object.entries(prev).filter(([entryKey]) => entryKey !== key),
+      );
+    });
+  }
+
   async function resolveAttachment(
     file: File | null,
     mode: AttachmentMode,
@@ -327,7 +361,10 @@ export function AcademicForm({ onSuccess }: AcademicFormProps) {
               <button
                 key={option.value}
                 type="button"
-                onClick={() => setServiceType(option.value)}
+                onClick={() => {
+                  setServiceType(option.value);
+                  revalidateField("service_type", option.value);
+                }}
                 disabled={isPending}
                 aria-pressed={active}
                 className={cn(
@@ -364,7 +401,10 @@ export function AcademicForm({ onSuccess }: AcademicFormProps) {
           label="Deadline Pengajuan"
           icon={CalendarClock}
           value={deadline}
-          onChange={(event) => setDeadline(event.target.value)}
+          onChange={(event) => {
+            setDeadline(event.target.value);
+            revalidateField("deadline", event.target.value);
+          }}
           error={fieldErrors.deadline}
           disabled={isPending}
           required
@@ -381,7 +421,10 @@ export function AcademicForm({ onSuccess }: AcademicFormProps) {
           placeholder="08123456789"
           icon={Phone}
           value={whatsapp}
-          onChange={(event) => setWhatsapp(event.target.value)}
+          onChange={(event) => {
+            setWhatsapp(event.target.value);
+            revalidateField("whatsapp", event.target.value);
+          }}
           error={fieldErrors.whatsapp}
           hint="Wajib diisi untuk catatan revisi & update pengerjaan"
           disabled={isPending}
@@ -396,7 +439,10 @@ export function AcademicForm({ onSuccess }: AcademicFormProps) {
           placeholder="Contoh: fokus perbaikan Bab 2, target similarity < 20%, ikuti format APA 7..."
           icon={MessageSquare}
           value={instructions}
-          onChange={(event) => setInstructions(event.target.value)}
+          onChange={(event) => {
+            setInstructions(event.target.value);
+            revalidateField("instructions", event.target.value);
+          }}
           error={fieldErrors.instructions}
           disabled={isPending}
           required
@@ -410,11 +456,25 @@ export function AcademicForm({ onSuccess }: AcademicFormProps) {
           icon={ClipboardList}
           hint="Lampirkan instruksi tugas atau rubrik penilaian dari dosen."
           mode={rubricMode}
-          onModeChange={setRubricMode}
+          onModeChange={(next) => {
+            setRubricMode(next);
+            // Mode unggah tidak memakai link — buang error rubric_url lama.
+            if (next === "upload") clearFieldError("rubric_url");
+          }}
           file={rubricFile}
-          onFileChange={setRubricFile}
+          onFileChange={(nextFile) => {
+            setRubricFile(nextFile);
+            // Memilih berkas berarti menyediakan lampiran — buang error link.
+            clearFieldError("rubric_url");
+          }}
           link={rubricLink}
-          onLinkChange={setRubricLink}
+          onLinkChange={(value) => {
+            setRubricLink(value);
+            // Link hanya divalidasi di mode link (rubric_url wajib berupa URL).
+            if (rubricMode === "link") {
+              revalidateField("rubric_url", value);
+            }
+          }}
           error={fieldErrors.rubric_url}
           disabled={isPending}
         />

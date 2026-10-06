@@ -1,17 +1,18 @@
 import { MobileFrame } from "@/components/layouts/MobileFrame";
-import { AuthHeroBackground } from "@/features/auth/components/AuthHeroBackground";
 
+/**
+ * Kerangka umum untuk seluruh layar autentikasi Campify.
+ *
+ * Layout ini sengaja dibuat netral (tanpa perataan maupun padding) agar setiap
+ * halaman bebas menentukan tata letaknya sendiri:
+ * - `/login` memakai header ilustrasi full-bleed dengan kartu yang menindih
+ *   (overlap) tepat di bawahnya.
+ * - `/register` tetap memakai kartu putih terpusat.
+ *
+ * Lebar kanvas tetap dibatasi `max-w-md` lewat `MobileFrame` (native mobile canvas).
+ */
 export default function AuthLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  return (
-    <div className="min-h-dvh w-full bg-slate-50">
-      <MobileFrame className="relative overflow-hidden bg-slate-50">
-        <main className="relative mx-auto flex w-full max-w-md flex-1 flex-col bg-slate-50 min-h-screen items-center justify-center p-4 overflow-hidden">
-          <AuthHeroBackground />
-          <div className="relative w-full">{children}</div>
-        </main>
-      </MobileFrame>
-    </div>
-  );
+  return <MobileFrame className="bg-slate-100">{children}</MobileFrame>;
 }

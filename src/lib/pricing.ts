@@ -1,3 +1,5 @@
+import { WEATHER_SURGE_MAX } from "@/lib/weather";
+
 /**
  * Kalkulator ongkir (dynamic shipping) untuk layanan Jastip Cepat.
  *
@@ -34,6 +36,11 @@ export interface JastipShippingInput {
   distanceKm: number;
   /** Waktu untuk menentukan jam sibuk; default `new Date()`. */
   at?: Date;
+  /**
+   * Tambahan ongkir karena cuaca buruk (hujan/petir) dari Open-Meteo.
+   * Default 0 — bila cuaca tidak tersedia ongkir tetap normal.
+   */
+  weatherSurge?: number;
 }
 
 export interface JastipShippingBreakdown {
@@ -45,8 +52,12 @@ export interface JastipShippingBreakdown {
   isPeakHour: boolean;
   /** 1 jika bukan jam sibuk, atau `JASTIP_PEAK_MULTIPLIER`. */
   peakMultiplier: number;
-  /** Total (base + ekstra) × pengali jam sibuk, sebelum pembulatan. */
+  /** Total (base + ekstra) × pengali jam sibuk + surge cuaca, sebelum pembulatan. */
   rawTotal: number;
+  /** Tambahan ongkir cuaca yang diterapkan (0 bila tidak ada). */
+  weatherSurge: number;
+  /** True hanya saat surge cuaca diterapkan. */
+  isWeatherSurge: boolean;
   /** Ongkir akhir: dibulatkan ke Rp500 & minimal Rp5.000. */
   total: number;
 }
@@ -85,6 +96,7 @@ export class JastipOutOfRangeError extends Error {
 export function calculateJastipShippingFee({
   distanceKm,
   at = new Date(),
+  weatherSurge = 0,
 }: JastipShippingInput): JastipShippingBreakdown {
   if (!Number.isFinite(distanceKm) || distanceKm < 0) {
     throw new JastipOutOfRangeError();
@@ -101,7 +113,12 @@ export function calculateJastipShippingFee({
   const peak = isPeakHour(at);
   const peakMultiplier = peak ? JASTIP_PEAK_MULTIPLIER : 1;
 
-  const rawTotal = (baseFee + extraFee) * peakMultiplier;
+  // Clamp defensif: nilai di luar rentang wajar tidak boleh mempengaruhi ongkir.
+  const surge = Number.isFinite(weatherSurge)
+    ? Math.max(0, Math.min(WEATHER_SURGE_MAX, weatherSurge))
+    : 0;
+
+  const rawTotal = (baseFee + extraFee) * peakMultiplier + surge;
   const rounded =
     Math.ceil(rawTotal / JASTIP_ROUNDING_STEP) * JASTIP_ROUNDING_STEP;
   const total = Math.max(JASTIP_MIN_FEE, rounded);
@@ -114,6 +131,8 @@ export function calculateJastipShippingFee({
     isPeakHour: peak,
     peakMultiplier,
     rawTotal,
+    weatherSurge: surge,
+    isWeatherSurge: surge > 0,
     total,
   };
 }

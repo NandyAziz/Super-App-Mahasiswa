@@ -114,6 +114,17 @@ export async function submitPaymentProofAction(input: {
   );
 
   if (result.error) {
+    // Log terstruktur agar akar masalah (kolom hilang / schema cache basi /
+    // RLS / enum) langsung terlihat di log server, bukan hanya toast ramah
+    // "Database belum sinkron..." yang diterima pengguna.
+    console.error("[Payment Proof] UPDATE gagal:", {
+      service: parsed.data.serviceName,
+      orderId: parsed.data.orderId,
+      code: result.error.code,
+      message: result.error.message,
+      details: result.error.details,
+      hint: result.error.hint,
+    });
     return {
       status: "error",
       message: mapDatabaseError(

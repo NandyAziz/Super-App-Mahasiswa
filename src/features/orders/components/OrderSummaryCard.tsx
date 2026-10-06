@@ -1,5 +1,10 @@
-import { QrCode } from "lucide-react";
+import { CalendarClock, Download, FileText, QrCode } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  buildDocumentDownloadUrl,
+  formatOrderCode,
+  getDownloadFileName,
+} from "@/lib/format";
 import { getOrderServiceMeta } from "../service-meta";
 import { getOrderStatusMeta, ORDER_ROLE_LABEL } from "../status";
 import type { OrderSummary } from "../types";
@@ -26,7 +31,7 @@ export function OrderSummaryCard({ order, onPay }: OrderSummaryCardProps) {
   const Icon = serviceMeta.icon;
 
   return (
-    <article className="rounded-3xl border border-white/20 bg-white/70 p-4 shadow-sm backdrop-blur-md">
+    <article className="group rounded-2xl border border-white/20 bg-white/70 p-4 shadow-sm backdrop-blur-md transition-all duration-200 hover:border-indigo-200/70 hover:shadow-md">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <span
@@ -57,7 +62,8 @@ export function OrderSummaryCard({ order, onPay }: OrderSummaryCardProps) {
         </span>
       </div>
 
-      <div className="mt-3 flex items-center justify-between gap-2">
+      {/* Chip metadata: layanan, kode pesanan, dan tanggal pembuatan. */}
+      <div className="mt-3 flex flex-wrap gap-2 text-[0.7rem] text-zinc-600">
         <span
           className={cn(
             "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[0.65rem] font-semibold",
@@ -67,7 +73,17 @@ export function OrderSummaryCard({ order, onPay }: OrderSummaryCardProps) {
           <Icon className="h-3 w-3" />
           {serviceMeta.label}
         </span>
-        <span className="text-[0.7rem] text-zinc-400">{order.createdLabel}</span>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-100 bg-indigo-50 px-2.5 py-1">
+          <FileText className="h-3 w-3 text-indigo-500" />
+          {/* Kode ringkas (#PRT-A1B2C3) — pengganti UUID panjang. */}
+          <span className="font-mono text-[0.6rem] font-semibold">
+            {formatOrderCode(order.service, order.id)}
+          </span>
+        </span>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-100 bg-indigo-50 px-2.5 py-1">
+          <CalendarClock className="h-3 w-3 text-indigo-500" />
+          {order.createdLabel}
+        </span>
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-2 rounded-2xl bg-zinc-50/80 px-3 py-2">
@@ -81,6 +97,21 @@ export function OrderSummaryCard({ order, onPay }: OrderSummaryCardProps) {
           </span>
         ) : null}
       </div>
+
+      {order.documentUrl ? (
+        <a
+          href={buildDocumentDownloadUrl(order.documentUrl)}
+          download={getDownloadFileName(order.documentUrl)}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Unduh dokumen ${order.title}`}
+          onClick={(event) => event.stopPropagation()}
+          className="inline-flex items-center gap-1 rounded-lg border border-indigo-100 bg-indigo-50 px-2 py-1 text-[0.65rem] font-semibold text-indigo-600 transition-all duration-200 active:scale-95"
+        >
+          <Download className="h-3 w-3" />
+          <span>Unduh</span>
+        </a>
+      ) : null}
 
       {isPayable(order) && onPay ? (
         <button

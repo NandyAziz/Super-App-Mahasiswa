@@ -1,12 +1,18 @@
 import Link from "next/link";
 import Image from "next/image";
-import { Bell } from "lucide-react";
+import { NotificationBell } from "@/features/notifications/components/NotificationBell";
+import { fetchUnreadNotificationCount } from "@/features/notifications/queries";
+import { fetchWeatherBadge } from "@/lib/weather";
+import { WeatherBadge } from "@/features/weather/components/WeatherBadge";
 
-/** Tombol aksi cepat di header (notifikasi). */
-const ACTION_BUTTON_CLASS =
-  "relative flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-xs transition-all duration-200 hover:text-indigo-600 active:scale-95";
+export async function HomeHeader() {
+  // Badge dihitung di server agar akurat per user dan tidak berkedip saat mount.
+  // Cuaca diambil paralel agar header tidak menunggu notifikasi.
+  const [unreadCount, weather] = await Promise.all([
+    fetchUnreadNotificationCount(),
+    fetchWeatherBadge(),
+  ]);
 
-export function HomeHeader() {
   return (
     <header className="flex items-center justify-between gap-3">
       <Link href="/" aria-label="Beranda Campify" className="flex items-center">
@@ -21,17 +27,8 @@ export function HomeHeader() {
       </Link>
 
       <div className="flex items-center gap-2">
-        <Link
-          href="/inbox"
-          aria-label="Notifikasi"
-          className={ACTION_BUTTON_CLASS}
-        >
-          <Bell className="h-4.5 w-4.5" />
-          <span
-            aria-hidden="true"
-            className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white"
-          />
-        </Link>
+        <WeatherBadge initial={weather} />
+        <NotificationBell initialCount={unreadCount} />
 
         <Link
           href="/profile"

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { JASTIP_PAID_STATUS } from "@/features/jastip/types";
-import type { OrderService } from "@/features/orders/types";
+import type { OrderService, OrderStatus } from "@/features/orders/types";
 import { getOrderStatusMeta } from "@/features/orders/status";
 import { fetchProfileRole } from "@/features/profile/queries";
 import {
@@ -13,9 +13,13 @@ import { mapDatabaseError } from "@/lib/supabase/errors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   confirmOrderPaymentSchema,
+  deleteAdminOrderSchema,
   updateAdminOrderStatusSchema,
 } from "./schemas";
-import type { AdminOperatorStatus } from "./status";
+import {
+  ADMIN_DELETABLE_STATUSES,
+  type AdminOperatorStatus,
+} from "./status";
 import type { AdminActionResult } from "./types";
 
 type SupabaseServerClient = Awaited<
@@ -46,6 +50,15 @@ const PAID_STATUS_BY_SERVICE: Record<OrderService, string> = {
 const SESSION_EXPIRED: AdminActionResult = {
   status: "error",
   message: "Sesi berakhir. Silakan login kembali.",
+};
+
+/** Nama tabel Supabase tiap layanan — dipakai operasi baca & hapus baris. */
+const SERVICE_TABLES: Record<OrderService, string> = {
+  jastip: "jastip_orders",
+  printing: "print_orders",
+  projects: "coding_projects",
+  tutoring: "tutoring_sessions",
+  academic: "academic_services",
 };
 
 const FORBIDDEN: AdminActionResult = {
@@ -273,5 +286,106 @@ export async function confirmOrderPaymentAction(input: {
   return {
     status: "success",
     message: "Pembayaran dikonfirmasi! Status pesanan kini Lunas.",
+  };
+}
+
+/**
+ * Penghapusan permanen baris pesanan oleh operator Campify.
+ *
+ * Status asal tidak pernah dipercaya dari client: dibaca ulang dari database
+ * dan wajib termasuk `ADMIN_DELETABLE_STATUSES` (`completed` / `cancelled`)
+ * agar pesanan yang masih berjalan tidak dapat dihapus. Filter status juga
+ * diterapkan langsung pada perintah `DELETE`, sehingga validasi tetap berlaku
+ * walau baris berubah status di antara kedua query (TOCTOU).
+ */
+export async function deleteOrderAction(input: {
+  service: OrderService;
+  orderId: string;
+}): Promise<AdminActionResult> {
+  const parsed = deleteAdminOrderSchema.safeParse(input);
+  if (!parsed.success) {
+    return { status: "error", message: "Permintaan penghapusan tidak valid." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) {
+    return SESSION_EXPIRED;
+  }
+
+  // Defense-in-depth: Server Action dapat dipanggil langsung tanpa melewati
+  // guard halaman `/admin`, sehingga peran diverifikasi ulang di sini.
+  const role = await fetchProfileRole(data.user.id);
+  if (role !== "admin") {
+    return FORBIDDEN;
+  }
+
+  const { service, orderId } = parsed.data;
+  const table = SERVICE_TABLES[service];
+
+  // Baca status terkini agar pesan penolakan dapat menyebabkan alasan yang
+  // jelas (status apa yang menghalangi penghapusan).
+  const current = await supabase
+    .from(table)
+    .select("status")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (current.error) {
+    return {
+      status: "error",
+      message: mapDatabaseError(
+        current.error.message,
+        "Gagal memeriksa pesanan. Silakan coba lagi.",
+      ),
+    };
+  }
+
+  const currentRow = current.data as { status: OrderStatus } | null;
+  if (!currentRow) {
+    return { status: "error", message: "Pesanan tidak ditemukan." };
+  }
+
+  if (!ADMIN_DELETABLE_STATUSES.includes(currentRow.status)) {
+    return {
+      status: "error",
+      message:
+        "Hanya pesanan berstatus Selesai atau Dibatalkan yang dapat dihapus.",
+    };
+  }
+
+  const deleted = await supabase
+    .from(table)
+    .delete()
+    .eq("id", orderId)
+    .in("status", [...ADMIN_DELETABLE_STATUSES])
+    .select("id");
+
+  if (deleted.error) {
+    return {
+      status: "error",
+      message: mapDatabaseError(
+        deleted.error.message,
+        "Gagal menghapus pesanan. Silakan coba lagi.",
+      ),
+    };
+  }
+
+  const deletedRows = deleted.data as { id: string }[] | null;
+  if (!deletedRows || deletedRows.length === 0) {
+    return {
+      status: "error",
+      message: "Pesanan gagal dihapus karena statusnya baru saja berubah.",
+    };
+  }
+
+  revalidatePath(ADMIN_PATH);
+  revalidatePath(ORDERS_PATH);
+  revalidatePath(`${ORDERS_PATH}/${orderId}`);
+  revalidatePath(SERVICE_PATHS[service]);
+
+  return {
+    status: "success",
+    message: "Pesanan berhasil dihapus permanen.",
   };
 }

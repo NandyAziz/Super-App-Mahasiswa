@@ -4,7 +4,8 @@ export type NotificationTone = "info" | "success" | "warning" | "danger";
 
 export interface AppNotification {
   id: string;
-  service: OrderService;
+  /** `null` bila notifikasi tidak terkait layanan tertentu. */
+  service: OrderService | null;
   title: string;
   body: string;
   tone: NotificationTone;

@@ -1,19 +1,23 @@
 import type { Metadata } from "next";
-import { AuthHeader } from "@/features/auth/components/AuthHeader";
+import { AuthHeroShell } from "@/features/auth/components/AuthHeroShell";
+import { GuestTrackLink } from "@/features/auth/components/GuestTrackLink";
 import { RegisterForm } from "@/features/auth/components/RegisterForm";
 
 export const metadata: Metadata = {
   title: "Daftar · Campify",
 };
 
+/**
+ * Layar pendaftaran dengan struktur yang sama persis seperti `/login`
+ * (dijamin oleh komponen bersama `AuthHeroShell`): header bergradasi penuh
+ * dengan logo Campify + maskot beruang, kartu putih yang menindih header,
+ * lalu tombol tamu yang menempel di dasar kartu.
+ */
 export default function RegisterPage() {
   return (
-    <div className="relative w-full bg-white rounded-3xl shadow-xl border border-slate-100 p-8">
-      <AuthHeader
-        title="Buat Akun Baru"
-        subtitle="Daftar untuk mulai menggunakan Campify"
-      />
+    <AuthHeroShell title="Buat Akun Baru" footer={<GuestTrackLink />}>
       <RegisterForm />
-    </div>
+    </AuthHeroShell>
   );
 }
+

@@ -56,6 +56,15 @@ export interface CodingProject {
   budget: number;
   status: ProjectStatus;
   created_at: string;
+  /** Teknologi/pustaka yang dicari klien (`text[]`, default `'{}'`). */
+  tech_stack: string[];
+  /**
+   * Nama lengkap pemesan (client) & freelancer dari `public.profiles`.
+   * Di-resolve terpisah oleh `getProjectsAction` (lihat catatan serupa pada
+   * `TutoringSession`) agar kartu bisa menampilkan identitas tanpa join FK.
+   */
+  client_name?: string | null;
+  freelancer_name?: string | null;
 }
 
 /** Hasil standar yang dikembalikan oleh seluruh Server Action fitur projects. */

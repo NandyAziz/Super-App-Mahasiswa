@@ -1,3 +1,5 @@
+import type { ComponentType } from "react";
+import { Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getOrderServiceMeta } from "@/features/orders/service-meta";
 import type { AppNotification, NotificationTone } from "../types";
@@ -13,16 +15,25 @@ const TONE_DOT: Record<NotificationTone, string> = {
   danger: "bg-rose-500",
 };
 
+/** Ikon generik untuk notifikasi tanpa layanan terkait. */
+function GenericServiceIcon({ className }: { className?: string }) {
+  return <Bell className={className} />;
+}
+
 export function NotificationItem({ notification }: NotificationItemProps) {
-  const serviceMeta = getOrderServiceMeta(notification.service);
-  const Icon = serviceMeta.icon;
+  const serviceMeta = notification.service
+    ? getOrderServiceMeta(notification.service)
+    : null;
+  const Icon: ComponentType<{ className?: string }> =
+    serviceMeta?.icon ?? GenericServiceIcon;
+  const tint = serviceMeta?.tint ?? "bg-indigo-100 text-indigo-600";
 
   return (
     <li className="flex gap-3 rounded-3xl border border-white/20 bg-white/70 p-4 shadow-sm backdrop-blur-md">
       <span
         className={cn(
           "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl",
-          serviceMeta.tint,
+          tint,
         )}
       >
         <Icon className="h-5 w-5" />
@@ -39,7 +50,8 @@ export function NotificationItem({ notification }: NotificationItemProps) {
           {notification.body}
         </p>
         <p className="mt-1 text-[0.65rem] text-zinc-400">
-          {serviceMeta.label} · {notification.createdLabel}
+          {serviceMeta ? `${serviceMeta.label} · ` : ""}
+          {notification.createdLabel}
         </p>
       </div>
     </li>

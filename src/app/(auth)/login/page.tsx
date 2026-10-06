@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { AuthHeader } from "@/features/auth/components/AuthHeader";
+import { AuthHeroShell } from "@/features/auth/components/AuthHeroShell";
+import { GuestTrackLink } from "@/features/auth/components/GuestTrackLink";
 import { LoginForm } from "@/features/auth/components/LoginForm";
 
 export const metadata: Metadata = {
@@ -11,6 +12,13 @@ interface LoginPageProps {
   searchParams: Promise<{ error?: string }>;
 }
 
+/**
+ * Layar masuk bergaya Parcel (kanvas native `max-w-md`).
+ *
+ * Struktur header bergradasi + kartu putih yang menindih disediakan oleh
+ * `AuthHeroShell` — komponen bersama yang dipakai juga oleh `/register`
+ * sehingga kedua layar dijamin identik secara visual dan tata letak.
+ */
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const { error } = await searchParams;
   const oauthError =
@@ -19,9 +27,8 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       : null;
 
   return (
-    <div className="relative w-full rounded-3xl border border-slate-100 bg-white p-8 shadow-xl">
-      <AuthHeader title="Masuk ke Akun" subtitle="Selamat datang!" />
+    <AuthHeroShell title="Selamat Datang Kembali" footer={<GuestTrackLink />}>
       <LoginForm initialError={oauthError} />
-    </div>
+    </AuthHeroShell>
   );
 }

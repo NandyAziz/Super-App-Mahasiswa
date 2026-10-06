@@ -1,0 +1,5 @@
+{
+  // At-rules dari Tailwind CSS v4 (@theme, @utility) belum dikenali oleh
+  // CSS language service bawaan VS Code, sehingga memunculkan warning.
+  "css.lint.unknownAtRules": "ignore"
+}

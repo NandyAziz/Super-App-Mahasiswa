@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import { formatRupiah } from "@/lib/format";
 import { acceptJastipOrderAction, updateJastipStatusAction } from "../actions";
 import { resolveCardAction } from "../selectors";
-import { JASTIP_STATUS_META } from "../status";
+import { getJastipStatusMeta } from "../status";
 import type { JastipActionResult, JastipOrder } from "../types";
 
 interface JastipCardProps {
@@ -30,7 +30,8 @@ export function JastipCard({ order, currentUserId, onPay }: JastipCardProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  const meta = JASTIP_STATUS_META[order.status];
+  // Selalu objek valid: lihat `getJastipStatusMeta` (fallback berlapis).
+  const meta = getJastipStatusMeta(order.status);
   const action = resolveCardAction(order, currentUserId);
   const isOwner = order.user_id === currentUserId;
   const isPayable = isOwner && order.status === "pending";
@@ -63,7 +64,7 @@ export function JastipCard({ order, currentUserId, onPay }: JastipCardProps) {
   }
 
   return (
-    <article className="rounded-3xl border border-white/20 bg-white/70 p-4 shadow-sm backdrop-blur-md">
+    <article className="group rounded-2xl border border-white/20 bg-white/70 p-4 shadow-sm backdrop-blur-md transition-all duration-200 hover:border-indigo-200/70 hover:shadow-md">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <span
@@ -95,19 +96,20 @@ export function JastipCard({ order, currentUserId, onPay }: JastipCardProps) {
         </span>
       </div>
 
-      <div className="mt-3 space-y-2 text-xs text-zinc-600">
-        <p className="flex items-start gap-2">
-          <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-indigo-500" />
+      {/* Chip metadata: rute (jemput → antar) dan ongkir. */}
+      <div className="mt-3 flex flex-wrap gap-2 text-[0.7rem] text-zinc-600">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-100 bg-indigo-50 px-2.5 py-1">
+          <MapPin className="h-3 w-3 shrink-0 text-indigo-500" />
           <span>
             {order.pickup_location}
             <ArrowRight className="mx-1 inline h-3 w-3 text-zinc-400" />
             {order.dropoff_location}
           </span>
-        </p>
-        <p className="flex items-center gap-2">
-          <Wallet className="h-3.5 w-3.5 text-indigo-500" />
+        </span>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-100 bg-indigo-50 px-2.5 py-1">
+          <Wallet className="h-3 w-3 text-indigo-500" />
           Ongkir {formatRupiah(order.delivery_tip)}
-        </p>
+        </span>
       </div>
 
       {action ? (

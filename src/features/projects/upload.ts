@@ -30,12 +30,45 @@ export async function uploadProjectBrief(file: File): Promise<string> {
     .upload(path, file, { cacheControl: "3600", upsert: false });
 
   if (error) {
-    throw new Error(
-      mapDatabaseError(
-        error.message,
-        "Gagal mengunggah berkas. Silakan coba lagi.",
-      ),
-    );
+    // Catat error Supabase secara utuh (name, status, code, pesan, objek
+    // mentah) plus konteks unggah agar masalah bucket / RLS / payload dapat
+    // didiagnosis — bukan sekadar objek kosong.
+    console.error("[Projects] Upload Storage gagal:", {
+      name: error.name,
+      message: error.message,
+      status: error.status,
+      statusCode: error.statusCode,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+      rawError: error,
+      bucket: PROJECT_STORAGE_BUCKET,
+      path,
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type,
+    });
+
+    const rawMessage = error.message ?? "";
+
+    // Bucket hanya dapat ditulis user terautentikasi (kebijakan
+    // `campify_storage_insert` -> `to authenticated`). Kegagalan izin
+    // (401/403 atau pesan RLS) diberi pesan yang eksplisit, bukan fallback umum.
+    const isPermissionBlocked =
+      error.status === 401 ||
+      error.status === 403 ||
+      /permission denied|not authorized|access denied|row[- ]level security|unauthenticated|invalid api key|jwt/i.test(
+        rawMessage,
+      );
+
+    const friendlyMessage = isPermissionBlocked
+      ? "Unggahan ditolak oleh kebijakan bucket (RLS). Pastikan Anda login ke akun kampus lalu coba lagi."
+      : mapDatabaseError(
+          rawMessage,
+          `Gagal mengunggah berkas ke bucket "${PROJECT_STORAGE_BUCKET}". Silakan coba lagi.`,
+        );
+
+    throw new Error(friendlyMessage);
   }
 
   const { data } = supabase.storage

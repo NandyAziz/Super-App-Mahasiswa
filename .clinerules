@@ -19,7 +19,7 @@
 # SUPABASE & DATABASE SECURITY
 - RLS STRICT: All queries must respect Row Level Security via `auth.uid()`.
 - DATA ISOLATION: Cross-tenant/cross-user data leakage is strictly prohibited.
-- AUTHENTICATION: Mandatory regex validation for emails: `/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(ac\.id|edu)$/`.
+- AUTHENTICATION: Mandatory regex validation for emails: `/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/`.
 
 # VALIDATION & TYPES (ZOD)
 - STRICT TYPING: TypeScript strict mode enabled. No `any` types.

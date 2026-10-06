@@ -27,11 +27,31 @@ import {
   type JastipShippingBreakdown,
 } from "@/lib/pricing";
 import { createJastipOrderAction } from "../actions";
+import { PromoBadge } from "@/features/promos/components/PromoBadge";
+import { FreeShippingBadge } from "@/features/orders/components/FreeShippingBadge";
+import { applyFreeShipping, type FreeShippingStatus } from "@/features/orders/free-shipping";
+import { resolveJastipFeeTotal } from "@/features/promos/catalog";
+import type { AppliedPromo } from "@/features/promos/catalog";
 import type { JastipActionResult, JastipOrder } from "../types";
+import { WeatherSurgeNotice } from "@/features/weather/components/WeatherSurgeNotice";
+import { CaptureLocationField } from "@/features/navigation/components/CaptureLocationField";
+import { requestCurrentPosition } from "@/features/navigation/geolocation";
+import type { DestinationCoords } from "@/features/orders/coordinates";
+import {
+  resolveSurgeValue,
+  useWeatherSurge,
+} from "@/features/weather/use-weather-surge";
 
 interface JastipCreateFormProps {
   /** Dipanggil setelah titipan dibuat; membawa baris yang baru dibuat. */
   onSuccess?: (order: JastipOrder) => void;
+  /**
+   * Promo yang sudah diverifikasi server (hasil parsing `?promo=` di halaman).
+   * Hanya KODE-nya yang dikirim — Server Action memverifikasi ulang.
+   */
+  appliedPromo?: AppliedPromo | null;
+  /** Status bebas ongkir otomatis; null bila belum terhitung. */
+  freeShipping?: FreeShippingStatus | null;
 }
 
 /** Jarak awal (KM) agar ongkir dasar langsung terlihat. */
@@ -43,7 +63,7 @@ const WHATSAPP_HINT =
 const RADIUS_NOTICE = `Ongkir otomatis: Rp5.000 (0–2 KM), +Rp2.000/km, maksimal ${JASTIP_MAX_DISTANCE_KM} KM. Jam sibuk (11:00–13:00 & 16:00–18:00) +20%.`;
 
 type FeeState =
-  | { status: "ok"; breakdown: JastipShippingBreakdown }
+  | { status: "ok"; breakdown: JastipShippingBreakdown; saved: number }
   | { status: "out_of_range" }
   | { status: "idle" };
 
@@ -94,6 +114,13 @@ function FeeBreakdown({ breakdown }: { breakdown: JastipShippingBreakdown }) {
         </div>
       ) : null}
 
+      {breakdown.isWeatherSurge ? (
+        <div className="flex items-center justify-between text-xs font-medium text-sky-600">
+          <span>Surge cuaca</span>
+          <span>+{formatRupiah(breakdown.weatherSurge)}</span>
+        </div>
+      ) : null}
+
       <div className="mt-1 flex items-center justify-between border-t border-indigo-100 pt-2 text-sm font-bold text-slate-900">
         <span>Total Ongkir</span>
         <span>{formatRupiah(breakdown.total)}</span>
@@ -102,14 +129,24 @@ function FeeBreakdown({ breakdown }: { breakdown: JastipShippingBreakdown }) {
   );
 }
 
-export function JastipCreateForm({ onSuccess }: JastipCreateFormProps) {
+export function JastipCreateForm({
+  onSuccess,
+  appliedPromo = null,
+  freeShipping = null,
+}: JastipCreateFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [distance, setDistance] = useState(String(DEFAULT_DISTANCE));
+  // Titik lokasi barang untuk peta navigasi driver di `/admin`. Diisi otomatis
+  // oleh GPS perangkat saat form dibuka; tetap opsional bila ditolak.
+  const [destination, setDestination] = useState<DestinationCoords | null>(null);
 
   // Pratinjau ongkir real-time. Form hanya dirender di client (di dalam Modal
   // yang baru mount saat dibuka), sehingga `new Date()` aman dari mismatch.
+  // Surge cuaca Open-Meteo ikut diterapkan agar preview = nilai tersimpan.
+  const weatherSurge = useWeatherSurge();
+  const weatherValue = resolveSurgeValue(weatherSurge);
   const feeState = useMemo<FeeState>(() => {
     const value = Number(distance);
     if (!Number.isFinite(value) || value <= 0) {
@@ -117,9 +154,28 @@ export function JastipCreateForm({ onSuccess }: JastipCreateFormProps) {
     }
 
     try {
+      const breakdown = calculateJastipShippingFee({
+        distanceKm: value,
+        weatherSurge: weatherValue,
+      });
+
+      // Promo memakai rumus murni yang PERSIS sama dengan Server Action,
+      // jadi total di layar == nominal yang tersimpan. Promo `null` (tidak
+      // aktif / tidak eligible) tidak mengubah apa pun.
+      const fee = resolveJastipFeeTotal(
+        appliedPromo?.code ?? null,
+        breakdown.total,
+        Boolean(appliedPromo),
+      );
+
+      // Bebas ongkir otomatis (tanpa kode) menimpa total promo: subtotal + 0.
+      const freeEligible = freeShipping?.eligible ?? false;
+      const finalTotal = applyFreeShipping(fee.total, freeEligible);
+
       return {
         status: "ok",
-        breakdown: calculateJastipShippingFee({ distanceKm: value }),
+        breakdown: { ...breakdown, total: finalTotal },
+        saved: breakdown.total - finalTotal,
       };
     } catch (cause) {
       if (cause instanceof JastipOutOfRangeError) {
@@ -127,7 +183,7 @@ export function JastipCreateForm({ onSuccess }: JastipCreateFormProps) {
       }
       throw cause;
     }
-  }, [distance]);
+  }, [distance, weatherValue, appliedPromo, freeShipping]);
 
   function resetForm(form: HTMLFormElement): void {
     form.reset();
@@ -153,9 +209,29 @@ export function JastipCreateForm({ onSuccess }: JastipCreateFormProps) {
   function handleSubmit(event: React.FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     const form = event.currentTarget;
-    const formData = new FormData(form);
 
     startTransition(async () => {
+      // Auto-capture di form mungkin belum selesai saat pelanggan menekan
+      // tombol. Ambil sekali lagi di sini bila koordinat belum ada, lalu
+      // TULIS EKSPLISIT ke FormData. Ini menutup dua celah sekaligus:
+      // izin GPS yang disetujui belakangan, dan koordinat yang belum sempat
+      // ter-render ke hidden input.
+      const coords = destination ?? (await requestCurrentPosition());
+      if (coords) {
+        setDestination(coords);
+      }
+
+      const formData = new FormData(form);
+      // Hidden input sudah terbaca `FormData(form)`, tetapi kita set ulang
+      // agar tidak bergantung pada waktu render React.
+      formData.set("destination_lat", coords ? String(coords.lat) : "");
+      formData.set("destination_lng", coords ? String(coords.lng) : "");
+      // Hanya KODE promo yang dikirim. Nominal diskon & kelayakan tetap
+      // dihitung ulang di server — client tidak boleh menentukan harga.
+      if (appliedPromo) {
+        formData.set("promo_code", appliedPromo.code);
+      }
+
       applyResult(await createJastipOrderAction(formData), form);
     });
   }
@@ -163,6 +239,16 @@ export function JastipCreateForm({ onSuccess }: JastipCreateFormProps) {
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-4">
       <JastipHero />
+
+      {/* Promo tampil hanya bila sudah diverifikasi server. */}
+      <PromoBadge
+        promo={appliedPromo}
+        savedAmount={feeState.status === "ok" && !freeShipping?.eligible ? feeState.saved : 0}
+      />
+      <FreeShippingBadge
+        status={freeShipping}
+        savedAmount={feeState.status === "ok" ? feeState.saved : 0}
+      />
 
       <section className="space-y-4">
         <TextField
@@ -224,8 +310,18 @@ export function JastipCreateForm({ onSuccess }: JastipCreateFormProps) {
           required
         />
 
+        <CaptureLocationField
+          lat={destination?.lat ?? null}
+          lng={destination?.lng ?? null}
+          onChange={setDestination}
+          autoCaptureOnMount
+        />
+
         {feeState.status === "ok" ? (
-          <FeeBreakdown breakdown={feeState.breakdown} />
+          <>
+            <FeeBreakdown breakdown={feeState.breakdown} />
+            <WeatherSurgeNotice surge={weatherSurge} />
+          </>
         ) : feeState.status === "out_of_range" ? (
           <p className="flex items-start gap-2 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-xs font-medium text-rose-600">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />

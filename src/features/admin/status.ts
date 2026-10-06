@@ -11,6 +11,8 @@ export const ADMIN_ACTION_STATUSES: readonly OrderStatus[] = [
   "PENDING_VERIFICATION",
   "accepted",
   "PAID",
+  "in_progress",
+  "out_for_delivery",
 ];
 
 /**
@@ -19,6 +21,7 @@ export const ADMIN_ACTION_STATUSES: readonly OrderStatus[] = [
  */
 export const ADMIN_REVENUE_STATUSES: readonly OrderStatus[] = [
   "in_progress",
+  "out_for_delivery",
   "completed",
   "PAID",
 ];
@@ -30,8 +33,23 @@ export const ADMIN_REVENUE_STATUSES: readonly OrderStatus[] = [
  */
 export const ADMIN_OPERATOR_STATUSES = [
   "in_progress",
+  "out_for_delivery",
   "completed",
   "cancelled",
 ] as const;
 
 export type AdminOperatorStatus = (typeof ADMIN_OPERATOR_STATUSES)[number];
+
+/**
+ * Status yang mengizinkan baris pesanan dihapus permanen oleh operator.
+ * Hanya tahap akhir (`completed`) atau yang sudah dibatalkan (`cancelled`);
+ * pesanan berjalan (`pending`, `accepted`, `PAID`, `in_progress`,
+ * `PENDING_VERIFICATION`) tidak boleh dihapus.
+ *
+ * Konstanta ini dipakai oleh Server Action (validasi status) dan tabel admin
+ * (render tombol Hapus) agar keduanya selalu konsisten.
+ */
+export const ADMIN_DELETABLE_STATUSES: readonly OrderStatus[] = [
+  "completed",
+  "cancelled",
+];

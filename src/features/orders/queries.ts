@@ -21,6 +21,7 @@ interface PrintRow {
   document_url: string;
   copies: number;
   delivery_location: string | null;
+  delivery_fee: number;
   status: OrderStatus;
   created_at: string;
 }
@@ -48,6 +49,7 @@ interface TutoringRow {
 interface AcademicRow {
   id: string;
   service_type: AcademicServiceType;
+  document_url: string | null;
   status: OrderStatus;
   created_at: string;
 }
@@ -56,12 +58,13 @@ interface AcademicRow {
 const JASTIP_SUMMARY_SELECT =
   "id, user_id, courier_id, item_name, dropoff_location, delivery_tip, status, created_at";
 const PRINT_SUMMARY_SELECT =
-  "id, document_url, copies, delivery_location, status, created_at";
+  "id, document_url, copies, delivery_location, delivery_fee, status, created_at";
 const PROJECT_SUMMARY_SELECT =
   "id, client_id, freelancer_id, title, budget, status, created_at";
 const TUTORING_SUMMARY_SELECT =
   "id, student_id, tutor_id, subject, price, status, created_at";
-const ACADEMIC_SUMMARY_SELECT = "id, service_type, status, created_at";
+const ACADEMIC_SUMMARY_SELECT =
+  "id, service_type, document_url, status, created_at";
 
 function roleOf(isOwner: boolean): OrderRole {
   return isOwner ? "owner" : "partner";
@@ -83,6 +86,7 @@ function toJastipSummaries(
     createdAt: row.created_at,
     createdLabel: formatRelativeTime(row.created_at, now),
     amount: row.delivery_tip,
+    documentUrl: null,
   }));
 }
 
@@ -92,13 +96,17 @@ function toPrintSummaries(rows: PrintRow[] | null, now: Date): OrderSummary[] {
     service: "printing",
     title: getUrlLabel(row.document_url),
     subtitle: `${row.copies} salinan · ${row.delivery_location ?? "Lokasi belum diisi"}`,
-    // Harga cetak dikonfirmasi mitra via WhatsApp, jadi belum ada tagihan di muka.
-    amountLabel: null,
+    // Ongkir ditagihkan di muka; biaya cetaknya sendiri dikonfirmasi mitra via
+    // WhatsApp sehingga tidak ikut dihitung. Baris lama (sebelum kolom
+    // `delivery_fee` ada) bernilai 0 dan sengaja tidak ditagihkan.
+    amountLabel:
+      row.delivery_fee > 0 ? `Ongkir ${formatRupiah(row.delivery_fee)}` : null,
     status: row.status,
     role: "owner",
     createdAt: row.created_at,
     createdLabel: formatRelativeTime(row.created_at, now),
-    amount: null,
+    amount: row.delivery_fee > 0 ? row.delivery_fee : null,
+    documentUrl: row.document_url,
   }));
 }
 
@@ -118,6 +126,7 @@ function toProjectSummaries(
     createdAt: row.created_at,
     createdLabel: formatRelativeTime(row.created_at, now),
     amount: row.budget,
+    documentUrl: null,
   }));
 }
 
@@ -137,6 +146,7 @@ function toTutoringSummaries(
     createdAt: row.created_at,
     createdLabel: formatRelativeTime(row.created_at, now),
     amount: row.price,
+    documentUrl: null,
   }));
 }
 
@@ -155,6 +165,7 @@ function toAcademicSummaries(
     createdAt: row.created_at,
     createdLabel: formatRelativeTime(row.created_at, now),
     amount: null,
+    documentUrl: row.document_url,
   }));
 }
 

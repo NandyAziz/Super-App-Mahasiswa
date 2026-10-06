@@ -1,3 +1,4 @@
+import { canCancelOrder } from "@/features/orders/cancellation";
 import type {
   TutoringProgressStatus,
   TutoringSession,
@@ -57,10 +58,14 @@ export function resolveTutoringCardAction(
   return null;
 }
 
-/** Mahasiswa pemesan boleh membatalkan sesi selama belum ada tutor aktif. */
+/**
+ * Mahasiswa pemesan HANYA boleh membatalkan sesi selama statusnya masih
+ * `pending` — belum ada tutor yang menerimanya. Aturan status memakai
+ * konstanta bersama yang sama dengan penjaga di Server Action.
+ */
 export function canCancelTutoringSession(
   session: TutoringSession,
   userId: string,
 ): boolean {
-  return session.student_id === userId && session.status === "pending";
+  return session.student_id === userId && canCancelOrder(session.status);
 }

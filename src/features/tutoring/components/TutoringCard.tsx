@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
-import { Ban, CalendarClock, GraduationCap, Loader2, Wallet } from "lucide-react";
+import { Ban, BookOpen, CalendarClock, GraduationCap, Loader2, UserRound, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatRupiah } from "@/lib/format";
@@ -72,8 +72,14 @@ export function TutoringCard({ session, currentUserId }: TutoringCardProps) {
     });
   }
 
+  // Identitas lawan transaksi: mahasiswa melihat nama tutor; tutor/pengunjung
+  // melihat nama pemesan. Fallback ramah bila profil belum tersedia.
+  const personLabel = isOwner
+    ? (session.tutor_name ?? "Belum ada tutor")
+    : (session.student_name ?? "Mahasiswa");
+
   return (
-    <article className="rounded-3xl border border-white/20 bg-white/70 p-4 shadow-sm backdrop-blur-md">
+    <article className="group rounded-2xl border border-white/20 bg-white/70 p-4 shadow-sm backdrop-blur-md transition-all duration-200 hover:border-indigo-200/70 hover:shadow-md">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <span
@@ -85,10 +91,9 @@ export function TutoringCard({ session, currentUserId }: TutoringCardProps) {
             <GraduationCap className="h-5 w-5" />
           </span>
           <div className="min-w-0">
-            <h3 className="truncate text-sm font-semibold text-zinc-900">
-              {session.subject}
-            </h3>
-            <p className="text-[0.7rem] text-zinc-400">{roleLabel}</p>
+            <p className="truncate text-[0.7rem] font-medium text-zinc-400">
+              {roleLabel}
+            </p>
           </div>
         </div>
 
@@ -102,15 +107,31 @@ export function TutoringCard({ session, currentUserId }: TutoringCardProps) {
         </span>
       </div>
 
-      <div className="mt-3 space-y-2 text-xs text-zinc-600">
-        <p className="flex items-center gap-2">
-          <CalendarClock className="h-3.5 w-3.5 text-indigo-500" />
+      {/* Chip metadata ikon: mata pelajaran, jadwal, dan nama tutor/pemesan. */}
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-100 bg-indigo-50 px-2.5 py-1 text-[0.68rem] font-semibold text-indigo-700">
+          <BookOpen className="h-3 w-3" />
+          {session.subject}
+        </span>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[0.65rem] font-medium text-slate-700">
+          <CalendarClock className="h-3 w-3 text-indigo-500" />
           {formatSchedule(session.scheduled_at)}
-        </p>
-        <p className="flex items-center gap-2">
+        </span>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[0.65rem] font-medium text-slate-700">
+          <UserRound className="h-3 w-3 text-indigo-500" />
+          {personLabel}
+        </span>
+      </div>
+
+      {/* Tarif tampil menonjol agar mudah dipindai. */}
+      <div className="mt-3 flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+        <span className="flex items-center gap-1.5 text-[0.7rem] font-medium text-slate-500">
           <Wallet className="h-3.5 w-3.5 text-indigo-500" />
-          Tarif {formatRupiah(session.price)}
-        </p>
+          Tarif per sesi
+        </span>
+        <span className="text-lg font-bold text-slate-900">
+          {formatRupiah(session.price)}
+        </span>
       </div>
 
       {action || showCancel ? (

@@ -20,41 +20,56 @@ interface CampusService {
   featured?: boolean;
 }
 
+/**
+ * Warna tema per layanan.
+ *
+ * `projects` memakai **purple** (bukan violet) agar identik dengan
+ * `features/orders/service-meta.ts` — sebelumnya berbeda sehingga kartu yang
+ * sama tampil dua nuansa ungu berbeda antara Beranda dan halaman lain.
+ */
+const SERVICE_THEME: Record<string, string> = {
+  jastip: "bg-amber-50 text-amber-600 ring-1 ring-amber-100",
+  printing: "bg-blue-50 text-blue-600 ring-1 ring-blue-100",
+  projects: "bg-purple-50 text-purple-600 ring-1 ring-purple-100",
+  tutoring: "bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100",
+  academic: "bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100",
+};
+
 const CAMPUS_SERVICES: CampusService[] = [
   {
     title: "Jastip Cepat",
     description: "Titip beli apa saja",
     href: "/jastip",
     icon: ShoppingBag,
-    badgeClass: "bg-amber-50 text-amber-600 ring-1 ring-amber-100",
+    badgeClass: SERVICE_THEME.jastip,
   },
   {
     title: "Jasa Cetak",
     description: "Print & jilid dokumen",
     href: "/printing",
     icon: Printer,
-    badgeClass: "bg-blue-50 text-blue-600 ring-1 ring-blue-100",
+    badgeClass: SERVICE_THEME.printing,
   },
   {
     title: "Proyek IT & Tugas",
     description: "Bantuan tugas coding",
     href: "/projects",
     icon: Code2,
-    badgeClass: "bg-violet-50 text-violet-600 ring-1 ring-violet-100",
+    badgeClass: SERVICE_THEME.projects,
   },
   {
     title: "Tutor Privat",
     description: "Belajar bareng tutor",
     href: "/tutoring",
     icon: GraduationCap,
-    badgeClass: "bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100",
+    badgeClass: SERVICE_THEME.tutoring,
   },
   {
     title: "Bantuan Akademik",
     description: "Proofreading & pendampingan laporan",
     href: "/academic",
     icon: BookOpenCheck,
-    badgeClass: "bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100",
+    badgeClass: SERVICE_THEME.academic,
     featured: true,
   },
 ];
@@ -67,6 +82,15 @@ const CARD_CLASS =
 const FEATURED_CARD_CLASS =
   "col-span-2 flex items-center gap-3 rounded-2xl border border-indigo-100 bg-linear-to-br from-indigo-50 to-white p-4 shadow-xs transition-all duration-200 cursor-pointer hover:-translate-y-1 hover:shadow-md hover:border-indigo-200 active:scale-95";
 
+/**
+ * Ikon layanan.
+ *
+ * Ukuran badge (12) dan ikon (6 → 24px) sengaja dikunci di sini agar kelima
+ * kartu seragam — sebelumnya ikon hanya 20px sehingga terlihat kecil
+ * dibanding badge di kartu unggulan.
+ *
+ * `strokeWidth` diseragamkan ke 2 agar semua ikon punya tebal garis sama.
+ */
 function ServiceIcon({
   icon: Icon,
   badgeClass,
@@ -77,11 +101,11 @@ function ServiceIcon({
   return (
     <span
       className={cn(
-        "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl",
+        "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl",
         badgeClass,
       )}
     >
-      <Icon className="h-5 w-5" />
+      <Icon className="h-6 w-6" strokeWidth={2} aria-hidden="true" />
     </span>
   );
 }

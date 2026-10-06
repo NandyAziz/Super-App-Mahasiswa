@@ -48,7 +48,7 @@ export function AdminOverviewCards({ overview }: { overview: AdminOverview }) {
         return (
           <div
             key={stat.label}
-            className="rounded-2xl border border-white/20 bg-white/70 p-3 shadow-sm backdrop-blur-md"
+            className="rounded-2xl border border-white/20 bg-white/70 p-3 shadow-sm backdrop-blur-md transition-all duration-200 hover:border-indigo-200/70 hover:shadow-md"
           >
             <span
               className={cn(

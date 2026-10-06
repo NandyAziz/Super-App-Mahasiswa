@@ -1,3 +1,4 @@
+import { canCancelOrder } from "@/features/orders/cancellation";
 import type { PrintProgressStatus, PrintStatus } from "./types";
 
 export interface PrintCardAction {
@@ -5,15 +6,15 @@ export interface PrintCardAction {
   nextStatus: PrintProgressStatus;
 }
 
-/** Aksi utama (simulasi mitra fotokopi/admin) sesuai status saat ini. */
+/** Aksi utama alur perantara cetak (tim Campify) sesuai status saat ini. */
 export function resolvePrintCardAction(
   status: PrintStatus,
 ): PrintCardAction | null {
   if (status === "pending") {
-    return { label: "Terima Pesanan", nextStatus: "accepted" };
+    return { label: "Terima & Ambil Berkas", nextStatus: "accepted" };
   }
   if (status === "accepted") {
-    return { label: "Mulai Cetak", nextStatus: "in_progress" };
+    return { label: "Proses di Fotokopi", nextStatus: "in_progress" };
   }
   if (status === "in_progress") {
     return { label: "Tandai Selesai", nextStatus: "completed" };
@@ -22,7 +23,14 @@ export function resolvePrintCardAction(
   return null;
 }
 
-/** Pesanan masih bisa dibatalkan selama belum selesai/dibatalkan. */
+/**
+ * Pesanan hanya bisa dibatalkan selama masih `pending`.
+ *
+ * Begitu Tim Campify sudah memprosesnya (`accepted`, `in_progress`,
+ * `out_for_delivery`, `PAID`, `PENDING_VERIFICATION`, `completed`), tombol
+ * Batal disembunyikan. Aturan ini memakai konstanta bersama yang sama dengan
+ * penjaga di Server Action, jadi UI dan backend tidak bisa berbeda pendapat.
+ */
 export function canCancelPrintOrder(status: PrintStatus): boolean {
-  return status === "pending" || status === "accepted";
+  return canCancelOrder(status);
 }

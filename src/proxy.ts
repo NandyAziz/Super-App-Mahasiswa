@@ -2,15 +2,33 @@ import { NextResponse, type NextRequest } from "next/server";
 import { resolveRequestOrigin } from "@/lib/app-url";
 import { getProxySession } from "@/lib/supabase/session";
 
-const AUTH_ROUTES = ["/login", "/register", "/signup"];
+const AUTH_ROUTES = [
+  "/login",
+  "/register",
+  "/signup",
+  /**
+   * Halaman permintaan tautan reset kata sandi: justru HARUS dapat diakses
+   * tanpa sesi (itulah gunanya). Bila tidak terdaftar di sini, pengguna anonim
+   * akan dipantulkan ke `/login` dan lupa kata sandi menjadi jalan buntu.
+   *
+   * Catatan: `/reset-password` sengaja TIDAK ada di sini karena butuh sesi
+   * pemulihan (dibuka lewat tautan di email).
+   */
+  "/forgot-password",
+];
 
 /**
  * Route yang harus tetap dapat diakses TANPA sesi.
- * Callback OAuth Supabase (`/auth/callback`) wajib lolos agar `?code` dapat
- * ditukar menjadi sesi; bila ikut dijaga, user akan terlempar ke `/login`
- * sebelum sesi sempat dibuat — persis penyebab loop login OAuth.
+ *
+ * - `/auth/callback` (Supabase OAuth): wajib lolos agar `?code` dapat ditukar
+ *   menjadi sesi; bila ikut dijaga, user akan terlempar ke `/login` sebelum
+ *   sesi sempat dibuat — persis penyebab loop login OAuth.
+ * - `/track` (pelacakan tamu): halaman publik untuk melacak status pesanan
+ *   dari ID/tautan tanpa akun. Datanya dibaca lewat RPC `security definer`
+ *   yang hanya mengembalikan kolom aman-publik (lihat migrasi
+ *   `20261017000000_public_order_tracking.sql`), bukan lewat RLS tabel.
  */
-const PUBLIC_ROUTES = ["/auth/callback"];
+const PUBLIC_ROUTES = ["/auth/callback", "/track"];
 
 function matchesRoute(pathname: string, routes: string[]): boolean {
   return routes.some(

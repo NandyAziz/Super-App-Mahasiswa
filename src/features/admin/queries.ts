@@ -1,10 +1,16 @@
 import { getAcademicServiceTypeMeta } from "@/features/academic/service-types";
 import type { AcademicServiceType } from "@/features/academic/types";
+import { parseAcademicNotes } from "@/features/academic/request-types";
 import type { OrderStatus } from "@/features/orders/types";
-import { formatRelativeTime, formatRupiah } from "@/lib/format";
+import { formatRelativeTime, formatRupiah, getUrlLabel } from "@/lib/format";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ADMIN_ACTION_STATUSES, ADMIN_REVENUE_STATUSES } from "./status";
-import type { AdminOrder, AdminOrdersPayload, AdminOverview } from "./types";
+import {
+  extractProjectAttachment,
+  extractProjectDeadline,
+  extractWhatsAppNumber,
+} from "./contact";
+import type { AdminOrder, AdminOrderDocument, AdminOrdersPayload, AdminOverview } from "./types";
 
 type SupabaseServerClient = Awaited<
   ReturnType<typeof createSupabaseServerClient>
@@ -14,11 +20,14 @@ interface JastipRow {
   id: string;
   user_id: string;
   item_name: string;
+  pickup_location: string | null;
   dropoff_location: string;
   delivery_tip: number;
   status: OrderStatus;
   created_at: string;
   payment_proof_url: string | null;
+  destination_lat: number | null;
+  destination_lng: number | null;
 }
 
 interface PrintRow {
@@ -26,39 +35,54 @@ interface PrintRow {
   user_id: string;
   document_url: string;
   copies: number;
+  contact_whatsapp: string | null;
   delivery_location: string | null;
+  custom_note: string | null;
+  delivery_fee: number;
   status: OrderStatus;
   created_at: string;
   payment_proof_url: string | null;
+  destination_lat: number | null;
+  destination_lng: number | null;
 }
 
 interface ProjectRow {
   id: string;
   client_id: string;
   title: string;
+  description: string;
   budget: number;
   status: OrderStatus;
   created_at: string;
   payment_proof_url: string | null;
+  destination_lat: number | null;
+  destination_lng: number | null;
 }
 
 interface TutoringRow {
   id: string;
   student_id: string;
   subject: string;
+  scheduled_at: string;
   price: number;
   status: OrderStatus;
   created_at: string;
   payment_proof_url: string | null;
+  destination_lat: number | null;
+  destination_lng: number | null;
 }
 
 interface AcademicRow {
   id: string;
   user_id: string;
   service_type: AcademicServiceType;
+  document_url: string | null;
+  notes: string | null;
   status: OrderStatus;
   created_at: string;
   payment_proof_url: string | null;
+  destination_lat: number | null;
+  destination_lng: number | null;
 }
 
 interface ProfileRow {
@@ -69,19 +93,47 @@ interface ProfileRow {
 const DEFAULT_CUSTOMER_NAME = "Mahasiswa";
 
 /** Kolom ringkas tiap tabel layanan untuk read-model tabel operator. */
+const DESTINATION_COLUMNS = "destination_lat, destination_lng";
+
 const JASTIP_ADMIN_SELECT =
-  "id, user_id, item_name, dropoff_location, delivery_tip, status, created_at, payment_proof_url";
+  "id, user_id, item_name, pickup_location, dropoff_location, delivery_tip, status, created_at, payment_proof_url, " +
+  DESTINATION_COLUMNS;
 const PRINT_ADMIN_SELECT =
-  "id, user_id, document_url, copies, delivery_location, status, created_at, payment_proof_url";
+  "id, user_id, document_url, copies, contact_whatsapp, delivery_location, custom_note, delivery_fee, status, created_at, payment_proof_url, " +
+  DESTINATION_COLUMNS;
 const PROJECT_ADMIN_SELECT =
-  "id, client_id, title, budget, status, created_at, payment_proof_url";
+  "id, client_id, title, description, budget, status, created_at, payment_proof_url, " +
+  DESTINATION_COLUMNS;
 const TUTORING_ADMIN_SELECT =
-  "id, student_id, subject, price, status, created_at, payment_proof_url";
+  "id, student_id, subject, scheduled_at, price, status, created_at, payment_proof_url, " +
+  DESTINATION_COLUMNS;
 const ACADEMIC_ADMIN_SELECT =
-  "id, user_id, service_type, status, created_at, payment_proof_url";
+  "id, user_id, service_type, document_url, notes, status, created_at, payment_proof_url, " +
+  DESTINATION_COLUMNS;
 
 function customerName(names: Map<string, string>, userId: string): string {
   return names.get(userId) ?? DEFAULT_CUSTOMER_NAME;
+}
+
+/** Baris layanan yang membawa koordinat tujuan (semua tabel punya kolom ini). */
+interface DestinationRow {
+  destination_lat: number | null;
+  destination_lng: number | null;
+}
+
+/** Koordinat tujuan hanya diteruskan bila KEDUA-nya ada & sah (WGS84). */
+function toDestination(row: DestinationRow): Pick<
+  AdminOrder,
+  "destinationLat" | "destinationLng"
+> {
+  const lat = row.destination_lat;
+  const lng = row.destination_lng;
+
+  if (lat === null || lng === null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return { destinationLat: null, destinationLng: null };
+  }
+
+  return { destinationLat: lat, destinationLng: lng };
 }
 
 function buildJastipOrder(
@@ -89,15 +141,23 @@ function buildJastipOrder(
   names: Map<string, string>,
   now: Date,
 ): AdminOrder {
+  const contactPhone = extractWhatsAppNumber(row.pickup_location);
+
   return {
     id: row.id,
     service: "jastip",
     customerName: customerName(names, row.user_id),
+    contactPhone,
+    address: row.dropoff_location,
+    specification: row.item_name,
     detail: `${row.item_name} → ${row.dropoff_location}`,
     amount: row.delivery_tip,
     amountLabel: `Ongkir ${formatRupiah(row.delivery_tip)}`,
     status: row.status,
     paymentProofUrl: row.payment_proof_url,
+    documentUrl: null,
+    documents: [],
+    ...toDestination(row),
     createdAt: row.created_at,
     createdLabel: formatRelativeTime(row.created_at, now),
   };
@@ -108,17 +168,36 @@ function buildPrintOrder(
   names: Map<string, string>,
   now: Date,
 ): AdminOrder {
+  // Berkas yang harus dicetak — dibuka/diunduh operator lewat
+  // file chip "📎 Lihat Dokumen Pelanggan" di `/admin`.
+  const documents: AdminOrderDocument[] = [
+    {
+      label: getUrlLabel(row.document_url),
+      url: row.document_url,
+      kind: "document",
+    },
+  ];
+
   return {
     id: row.id,
     service: "printing",
     customerName: customerName(names, row.user_id),
+    contactPhone: row.contact_whatsapp?.trim() || null,
+    address: row.delivery_location,
+    specification: `${row.copies} salinan${row.custom_note ? ` · ${row.custom_note}` : ""}`,
     detail: `${row.copies} salinan · ${row.delivery_location ?? "Lokasi belum diisi"}`,
-    // Harga cetak kini dikonfirmasi mitra via WhatsApp (bukan estimasi otomatis),
-    // sehingga belum ada tagihan yang bisa ditagihkan di muka.
-    amount: null,
-    amountLabel: null,
+    // Ongkir ditagihkan di muka; biaya cetaknya sendiri dikonfirmasi mitra via
+    // WhatsApp (bukan estimasi otomatis) sehingga tidak ikut dihitung. Baris
+    // lama bernilai 0 dan sengaja tidak ditagihkan.
+    amount:
+      row.delivery_fee > 0 ? row.delivery_fee : null,
+    amountLabel:
+      row.delivery_fee > 0 ? `Ongkir ${formatRupiah(row.delivery_fee)}` : null,
     status: row.status,
     paymentProofUrl: row.payment_proof_url,
+    documentUrl: row.document_url,
+    documents,
+    ...toDestination(row),
     createdAt: row.created_at,
     createdLabel: formatRelativeTime(row.created_at, now),
   };
@@ -129,15 +208,27 @@ function buildProjectOrder(
   names: Map<string, string>,
   now: Date,
 ): AdminOrder {
+  const deadline = extractProjectDeadline(row.description);
+  const attachmentUrl = extractProjectAttachment(row.description);
+  const documents: AdminOrderDocument[] = attachmentUrl
+    ? [{ label: getUrlLabel(attachmentUrl), url: attachmentUrl, kind: "attachment" }]
+    : [];
+
   return {
     id: row.id,
     service: "projects",
     customerName: customerName(names, row.client_id),
+    contactPhone: extractWhatsAppNumber(row.description),
+    address: null,
+    specification: deadline ? `Deadline: ${deadline}` : null,
     detail: row.title,
     amount: row.budget,
     amountLabel: `Budget ${formatRupiah(row.budget)}`,
     status: row.status,
     paymentProofUrl: row.payment_proof_url,
+    documentUrl: attachmentUrl,
+    documents,
+    ...toDestination(row),
     createdAt: row.created_at,
     createdLabel: formatRelativeTime(row.created_at, now),
   };
@@ -152,11 +243,17 @@ function buildTutoringOrder(
     id: row.id,
     service: "tutoring",
     customerName: customerName(names, row.student_id),
+    contactPhone: null,
+    address: null,
+    specification: row.scheduled_at ? `Jadwal: ${row.scheduled_at}` : null,
     detail: row.subject,
     amount: row.price,
     amountLabel: `Tarif ${formatRupiah(row.price)}`,
     status: row.status,
     paymentProofUrl: row.payment_proof_url,
+    documentUrl: null,
+    documents: [],
+    ...toDestination(row),
     createdAt: row.created_at,
     createdLabel: formatRelativeTime(row.created_at, now),
   };
@@ -167,15 +264,42 @@ function buildAcademicOrder(
   names: Map<string, string>,
   now: Date,
 ): AdminOrder {
+  const parsed = parseAcademicNotes(row.notes);
+  // Lampiran utama = `document_url` (draft); cadangan dari notes (rubrik dosen)
+  // untuk baris yang menyimpan keduanya.
+  const documents: AdminOrderDocument[] = [];
+
+  if (row.document_url) {
+    documents.push({
+      label: getUrlLabel(row.document_url),
+      url: row.document_url,
+      kind: "document",
+    });
+  }
+
+  if (parsed.rubricUrl && parsed.rubricUrl !== row.document_url) {
+    documents.push({
+      label: getUrlLabel(parsed.rubricUrl),
+      url: parsed.rubricUrl,
+      kind: "attachment",
+    });
+  }
+
   return {
     id: row.id,
     service: "academic",
     customerName: customerName(names, row.user_id),
+    contactPhone: parsed.whatsapp || null,
+    address: null,
+    specification: parsed.instructions || getAcademicServiceTypeMeta(row.service_type).label,
     detail: getAcademicServiceTypeMeta(row.service_type).label,
     amount: null,
     amountLabel: null,
     status: row.status,
     paymentProofUrl: row.payment_proof_url,
+    documentUrl: row.document_url,
+    documents,
+    ...toDestination(row),
     createdAt: row.created_at,
     createdLabel: formatRelativeTime(row.created_at, now),
   };

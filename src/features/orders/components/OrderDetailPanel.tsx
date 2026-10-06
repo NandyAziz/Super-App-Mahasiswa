@@ -1,10 +1,26 @@
 import Link from "next/link";
-import { BadgeCheck, ReceiptText, Wallet } from "lucide-react";
+import {
+  BadgeCheck,
+  CalendarClock,
+  Download,
+  Hash,
+  Layers,
+  ReceiptText,
+  UserRound,
+  Wallet,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatRupiah } from "@/lib/format";
+import {
+  buildDocumentDownloadUrl,
+  formatOrderCode,
+  formatRupiah,
+  getDownloadFileName,
+} from "@/lib/format";
 import { getOrderServiceMeta } from "../service-meta";
 import { getOrderStatusMeta, ORDER_ROLE_LABEL } from "../status";
 import type { OrderSummary } from "../types";
+import { OrderTrackingCard } from "@/features/tracking/components/OrderTrackingCard";
+import { ChatSection } from "@/features/chat/components/OrderChat";
 
 interface OrderDetailPanelProps {
   /** `null` berarti pesanan tidak ditemukan / bukan milik user login. */
@@ -13,7 +29,7 @@ interface OrderDetailPanelProps {
 
 function NotFoundPanel() {
   return (
-    <div className="flex flex-col items-center gap-3 rounded-3xl border border-dashed border-zinc-200 bg-white/60 px-6 py-12 text-center backdrop-blur-md">
+    <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-zinc-200 bg-white/60 px-6 py-12 text-center backdrop-blur-md">
       <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-50 text-rose-500">
         <ReceiptText className="h-6 w-6" />
       </span>
@@ -44,7 +60,7 @@ export function OrderDetailPanel({ order }: OrderDetailPanelProps) {
   const isPaid = order.status === "PAID";
 
   return (
-    <article className="rounded-3xl border border-white/20 bg-white/70 p-5 shadow-sm backdrop-blur-md">
+    <article className="rounded-2xl border border-white/20 bg-white/70 p-5 shadow-sm backdrop-blur-md">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <span
@@ -76,6 +92,19 @@ export function OrderDetailPanel({ order }: OrderDetailPanelProps) {
         </span>
       </div>
 
+      {order.documentUrl ? (
+        <a
+          href={buildDocumentDownloadUrl(order.documentUrl)}
+          download={getDownloadFileName(order.documentUrl)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-indigo-100 bg-indigo-50/70 px-4 py-2.5 text-xs font-semibold text-indigo-600 transition-all duration-200 active:scale-95"
+        >
+          <Download className="h-4 w-4" />
+          <span>Unduh Dokumen</span>
+        </a>
+      ) : null}
+
       {isPaid ? (
         <div className="mt-4 flex items-start gap-2 rounded-2xl border border-emerald-100 bg-emerald-50/80 p-3">
           <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
@@ -92,19 +121,37 @@ export function OrderDetailPanel({ order }: OrderDetailPanelProps) {
 
       <dl className="mt-4 space-y-2 rounded-2xl bg-zinc-50/80 p-4 text-xs">
         <div className="flex items-center justify-between gap-3">
-          <dt className="text-zinc-500">Layanan</dt>
+          <dt className="flex items-center gap-1.5 text-zinc-500">
+            <Hash className="h-3.5 w-3.5 text-indigo-500" />
+            Kode Pesanan
+          </dt>
+          <dd className="font-mono text-[0.7rem] font-semibold text-zinc-800">
+            {formatOrderCode(order.service, order.id)}
+          </dd>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <dt className="flex items-center gap-1.5 text-zinc-500">
+            <Layers className="h-3.5 w-3.5 text-indigo-500" />
+            Layanan
+          </dt>
           <dd className="truncate font-semibold text-zinc-800">
             {serviceMeta.label}
           </dd>
         </div>
         <div className="flex items-center justify-between gap-3">
-          <dt className="text-zinc-500">Peran</dt>
+          <dt className="flex items-center gap-1.5 text-zinc-500">
+            <UserRound className="h-3.5 w-3.5 text-indigo-500" />
+            Peran
+          </dt>
           <dd className="truncate font-semibold text-zinc-800">
             {ORDER_ROLE_LABEL[order.role]}
           </dd>
         </div>
         <div className="flex items-center justify-between gap-3">
-          <dt className="text-zinc-500">Dibuat</dt>
+          <dt className="flex items-center gap-1.5 text-zinc-500">
+            <CalendarClock className="h-3.5 w-3.5 text-indigo-500" />
+            Dibuat
+          </dt>
           <dd className="truncate font-semibold text-zinc-800">
             {order.createdLabel}
           </dd>
@@ -125,6 +172,25 @@ export function OrderDetailPanel({ order }: OrderDetailPanelProps) {
         <span className="text-base font-bold text-zinc-900">
           {order.amount !== null ? formatRupiah(order.amount) : "—"}
         </span>
+      </div>
+
+      {/*
+        Live tracking hanya muncul saat pesanan benar-benar sedang diantar.
+        Gerbang status ditekan di server (bukan di client) agar Leaflet tidak
+        pernah dimuat untuk pesanan yang tidak relevan.
+      */}
+      {order.status === "out_for_delivery" ? (
+        <div className="mt-4">
+          <OrderTrackingCard orderId={order.id} service={order.service} />
+        </div>
+      ) : null}
+
+      {/*
+        Chat internal pesanan (komponen presentasional `ChatSection`).
+        API contract & Server Action tidak berubah.
+      */}
+      <div className="mt-4">
+        <ChatSection orderId={order.id} service={order.service} />
       </div>
     </article>
   );

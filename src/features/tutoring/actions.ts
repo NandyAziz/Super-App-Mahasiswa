@@ -3,8 +3,14 @@
 import { revalidatePath } from "next/cache";
 import type { ZodError } from "zod";
 import { ensureUserProfile } from "@/features/profile/ensure";
+import { fetchProfileNames } from "@/features/profile/queries";
 import { mapDatabaseError } from "@/lib/supabase/errors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  canCancelOrder,
+  ORDER_CANCEL_BLOCKED_MESSAGE,
+} from "@/features/orders/cancellation";
+import type { OrderStatus } from "@/features/orders/types";
 import { toScheduledAtIso } from "./schedule";
 import {
   TUTORING_FLAT_RATE,
@@ -98,6 +104,15 @@ export async function createTutoringSessionAction(
   });
 
   if (error) {
+    console.error("[Tutoring] INSERT gagal:", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      studentId: context.userId,
+      subject: parsed.data.subject,
+    });
+
     return {
       status: "error",
       message: mapDatabaseError(
@@ -130,7 +145,21 @@ export async function getTutoringSessionsAction(): Promise<TutoringSession[]> {
   }
 
   const sessions: TutoringSession[] = data ?? [];
-  return sessions;
+
+  // Resolusi identitas (best-effort): FK menunjuk `auth.users` sehingga tidak
+  // bisa di-embed — lihat `fetchProfileNames`. Gagal → nama null (fallback UI).
+  const names = await fetchProfileNames(
+    context.supabase,
+    sessions.flatMap((session) => [session.student_id, session.tutor_id]),
+  );
+
+  return sessions.map((session) => ({
+    ...session,
+    student_name: names.get(session.student_id) ?? null,
+    tutor_name: session.tutor_id
+      ? (names.get(session.tutor_id) ?? null)
+      : null,
+  }));
 }
 
 export async function acceptTutoringSessionAction(
@@ -153,6 +182,15 @@ export async function acceptTutoringSessionAction(
     .eq("status", "pending");
 
   if (error) {
+    console.error("[Tutoring] UPDATE (terima sesi) gagal:", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      sessionId: parsed.data.sessionId,
+      tutorId: context.userId,
+    });
+
     return {
       status: "error",
       message: mapDatabaseError(
@@ -184,13 +222,68 @@ export async function updateTutoringStatusAction(
   const ownerColumn =
     parsed.data.status === "cancelled" ? "student_id" : "tutor_id";
 
-  const { error } = await context.supabase
+  // Pembatalan hanya sah saat sesi masih `pending` (belum ada tutor).
+  // Status dibaca ulang dari database (tidak pernah dipercaya dari client).
+  if (parsed.data.status === "cancelled") {
+    const { data: current, error: readError } = await context.supabase
+      .from("tutoring_sessions")
+      .select("status")
+      .eq("id", parsed.data.sessionId)
+      .maybeSingle();
+
+    if (readError) {
+      console.error("[Tutoring] Gagal membaca status saat pembatalan:", {
+        code: readError.code,
+        message: readError.message,
+        details: readError.details,
+        hint: readError.hint,
+        sessionId: parsed.data.sessionId,
+      });
+
+      return {
+        status: "error",
+        message: mapDatabaseError(
+          readError.message,
+          "Gagal memeriksa status sesi. Silakan coba lagi.",
+        ),
+      };
+    }
+
+    if (!current) {
+      return { status: "error", message: "Pesanan tidak ditemukan." };
+    }
+
+    if (!canCancelOrder(current.status as OrderStatus)) {
+      return { status: "error", message: ORDER_CANCEL_BLOCKED_MESSAGE };
+    }
+  }
+
+  let query = context.supabase
     .from("tutoring_sessions")
     .update({ status: parsed.data.status })
     .eq("id", parsed.data.sessionId)
     .eq(ownerColumn, context.userId);
 
+  // Penjaga atomik: mencegah pembatalan bila ada tutor yang sudah menerima
+  // sesi di antara pemeriksaan di atas dan UPDATE ini.
+  if (parsed.data.status === "cancelled") {
+    query = query.eq("status", "pending");
+  }
+
+  const { error } = await query;
+
   if (error) {
+    console.error("[Tutoring] UPDATE status gagal:", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      sessionId: parsed.data.sessionId,
+      nextStatus: parsed.data.status,
+      ownerColumn,
+      userId: context.userId,
+    });
+
     return {
       status: "error",
       message: mapDatabaseError(

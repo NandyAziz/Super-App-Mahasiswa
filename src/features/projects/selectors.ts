@@ -1,7 +1,5 @@
-import type {
-  CodingProject,
-  ProjectProgressStatus,
-} from "./types";
+import { canCancelOrder } from "@/features/orders/cancellation";
+import type { CodingProject, ProjectProgressStatus } from "./types";
 
 /** Proyek open milik mahasiswa lain (tersedia untuk freelancer). */
 export function selectMarketplaceProjects(
@@ -50,10 +48,14 @@ export function resolveProjectCardAction(
   return null;
 }
 
-/** Pemilik (client) boleh membatalkan proyek selama belum diambil freelancer. */
+/**
+ * Pemilik (client) HANYA boleh membatalkan proyek selama statusnya masih
+ * `pending` —也就是 belum ada freelancer yang menerimanya. Aturan status
+ * memakai konstanta bersama yang sama dengan penjaga di Server Action.
+ */
 export function canCancelProject(
   project: CodingProject,
   userId: string,
 ): boolean {
-  return project.client_id === userId && project.status === "pending";
+  return project.client_id === userId && canCancelOrder(project.status);
 }

@@ -1,40 +1,108 @@
 "use client";
 
 import { useState } from "react";
-import { PackagePlus, Plus } from "lucide-react";
+import { History, PackagePlus, Plus, ShoppingBag, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { Modal } from "@/components/ui/Modal";
 import { QrisPaymentModal } from "@/features/payment/components/QrisPaymentModal";
-import { selectCourierOrders, selectMyOrders } from "../selectors";
+import type { FreeShippingStatus } from "@/features/orders/free-shipping";
+import { ORDER_RUNNING_STATUSES } from "@/features/orders/types";
+import type { AppliedPromo } from "@/features/promos/catalog";
 import type { JastipOrder } from "../types";
+import { selectCourierOrders, selectMyOrders } from "../selectors";
 import { JastipCard } from "./JastipCard";
 import { JastipCreateForm } from "./JastipCreateForm";
 
 type JastipTab = "mine" | "courier";
+
+type JastipQueue = "running" | "history";
 
 const TABS: { id: JastipTab; label: string }[] = [
   { id: "mine", label: "Titipanku" },
   { id: "courier", label: "Cari Orderan" },
 ];
 
-const EMPTY_MESSAGE: Record<JastipTab, string> = {
-  mine: "Belum ada titipan. Yuk buat titipan pertamamu!",
-  courier: "Belum ada orderan yang bisa diambil saat ini.",
+const QUEUE_TABS: { id: JastipQueue; label: string }[] = [
+  { id: "running", label: "Pesanan Berjalan" },
+  { id: "history", label: "Riwayat Selesai" },
+];
+
+/** Konten empty state per tab: ikon mengundang + judul + ajakan bertindak. */
+const EMPTY_STATE: Record<
+  "courier" | `mine:${JastipQueue}`,
+  { icon: LucideIcon; title: string; description: string; hint: string }
+> = {
+  "mine:running": {
+    icon: PackagePlus,
+    title: "Tidak ada titipan berjalan 🎉",
+    description:
+      "Semua titipanmu selesai. Titipan yang sedang diantar kurir akan tampil di sini.",
+    hint: "Tekan tombol Titip Baru untuk memulai.",
+  },
+  "mine:history": {
+    icon: History,
+    title: "Belum ada riwayat titipan",
+    description:
+      "Titipan yang sudah selesai atau dibatalkan akan tersimpan rapi di sini.",
+    hint: "Selesaikan satu titipan untuk mengisi tab ini.",
+  },
+  courier: {
+    icon: ShoppingBag,
+    title: "Belum ada orderan",
+    description:
+      "Orderan titipan baru dari mahasiswa lain akan muncul di sini untuk kamu ambil.",
+    hint: "Pantau terus — orderan bisa datang kapan saja.",
+  },
 };
+
+/** Empty state `Titipanku` menyesuaikan antrean; `Cari Orderan` tetap tunggal. */
+function emptyStateFor(tab: JastipTab, queue: JastipQueue) {
+  if (tab !== "mine") {
+    return EMPTY_STATE.courier;
+  }
+
+  return queue === "running"
+    ? EMPTY_STATE["mine:running"]
+    : EMPTY_STATE["mine:history"];
+}
+
+function isRunning(status: JastipOrder["status"]): boolean {
+  return ORDER_RUNNING_STATUSES.includes(status);
+}
 
 interface JastipBoardProps {
   currentUserId: string;
   orders: JastipOrder[];
+  /** Promo yang sudah diverifikasi server; null bila tidak ada. */
+  appliedPromo: AppliedPromo | null;
+  /** Status bebas ongkir otomatis; null bila belum terhitung. */
+  freeShipping?: FreeShippingStatus | null;
 }
 
-export function JastipBoard({ currentUserId, orders }: JastipBoardProps) {
+export function JastipBoard({
+  currentUserId,
+  orders,
+  appliedPromo,
+  freeShipping = null,
+}: JastipBoardProps) {
   const [tab, setTab] = useState<JastipTab>("mine");
+  const [queue, setQueue] = useState<JastipQueue>("running");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [payingOrder, setPayingOrder] = useState<JastipOrder | null>(null);
 
+  const mineOrders = selectMyOrders(orders, currentUserId);
+  const runningCount = mineOrders.filter((order) =>
+    isRunning(order.status),
+  ).length;
+
   const visibleOrders =
     tab === "mine"
-      ? selectMyOrders(orders, currentUserId)
+      ? mineOrders.filter((order) =>
+          queue === "running"
+            ? isRunning(order.status)
+            : !isRunning(order.status),
+        )
       : selectCourierOrders(orders, currentUserId);
 
   /** Tutup form titipan lalu langsung buka QRIS untuk titipan yang baru dibuat. */
@@ -64,13 +132,40 @@ export function JastipBoard({ currentUserId, orders }: JastipBoardProps) {
         ))}
       </div>
 
-      {visibleOrders.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 rounded-3xl border border-dashed border-zinc-200 bg-white/60 px-6 py-10 text-center backdrop-blur-md">
-          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-500">
-            <PackagePlus className="h-6 w-6" />
-          </span>
-          <p className="text-sm text-zinc-500">{EMPTY_MESSAGE[tab]}</p>
+      {tab === "mine" ? (
+        <div
+          role="tablist"
+          aria-label="Filter antrean titipan"
+          className="grid grid-cols-2 gap-1 rounded-2xl border border-white/20 bg-white/70 p-1 backdrop-blur-md"
+        >
+          {QUEUE_TABS.map((item) => {
+            const label =
+              item.id === "running"
+                ? `Pesanan Berjalan (${runningCount})`
+                : item.label;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                aria-selected={queue === item.id}
+                onClick={() => setQueue(item.id)}
+                className={cn(
+                  "rounded-xl px-2 py-2 text-[0.7rem] font-semibold transition-all duration-200 active:scale-95",
+                  queue === item.id
+                    ? "bg-gradient-to-r from-indigo-500 to-violet-600 text-white shadow-md shadow-indigo-500/25"
+                    : "text-zinc-500 hover:text-zinc-700",
+                )}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
+      ) : null}
+
+      {visibleOrders.length === 0 ? (
+        <EmptyState {...emptyStateFor(tab, queue)} />
       ) : (
         <div className="space-y-3">
           {visibleOrders.map((order) => (
@@ -100,7 +195,7 @@ export function JastipBoard({ currentUserId, orders }: JastipBoardProps) {
         title="Titip Baru"
         onClose={() => setIsModalOpen(false)}
       >
-        <JastipCreateForm onSuccess={handleCreated} />
+        <JastipCreateForm onSuccess={handleCreated} appliedPromo={appliedPromo} freeShipping={freeShipping} />
       </Modal>
 
       {payingOrder ? (

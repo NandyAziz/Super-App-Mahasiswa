@@ -1,3 +1,5 @@
+import type { PromoCode } from "@/features/promos/catalog";
+
 export const PRINT_PROGRESS_STATUSES = [
   "accepted",
   "in_progress",
@@ -32,6 +34,17 @@ export interface PrintOrder {
   custom_note: string | null;
   /** Jumlah salinan yang diminta. */
   copies: number;
+  /**
+   * Ongkir pengiriman hasil cetak, dihitung server dari `delivery_location`
+   * (lihat `delivery.ts`). Ikut menentukan total yang dibayar pemesan.
+   */
+  delivery_fee: number;
+  /**
+   * Kode promo yang dipakai pesanan ini (jika ada), sudah diverifikasi server.
+   * Untuk `PAKET_SKRIPSI` nilainya mencatat klaim, bukan potongan otomatis —
+   * biaya cetak dikonfirmasi Tim Campify via WhatsApp.
+   */
+  promo_code: PromoCode | null;
 }
 
 /** Hasil standar yang dikembalikan oleh seluruh Server Action fitur printing. */

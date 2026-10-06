@@ -21,7 +21,11 @@ const STATUS_META: Record<string, AcademicStatusMeta> = {
   },
   in_progress: {
     label: "Sedang Diproses",
-    badge: "border-violet-200 bg-violet-100 text-violet-700",
+    badge: "border-blue-200 bg-blue-100 text-blue-700",
+  },
+  out_for_delivery: {
+    label: "Dalam Pengiriman",
+    badge: "border-sky-200 bg-sky-100 text-sky-700",
   },
   completed: {
     label: "Selesai",
@@ -37,9 +41,23 @@ const STATUS_META: Record<string, AcademicStatusMeta> = {
   },
 };
 
-/** Aman walau database mengembalikan status di luar yang dikenal UI. */
+/** Cadangan pasti-ada bila status tidak ditemukan di `STATUS_META`. */
+export const ACADEMIC_FALLBACK_STATUS_META: AcademicStatusMeta = {
+  label: "Status Tidak Diketahui",
+  badge: "border-slate-200 bg-slate-100 text-slate-700",
+};
+
+/**
+ * Metadata status dengan fallback berlapis: entri yang cocok → `pending` →
+ * literal cadangan. Selalu mengembalikan objek valid, sehingga pemanggil tidak
+ * pernah melempar `TypeError` membaca `.label` / `.badge`.
+ */
 export function getAcademicStatusMeta(status: AcademicStatus): AcademicStatusMeta {
-  return STATUS_META[status] ?? STATUS_META.pending;
+  return (
+    STATUS_META[status] ??
+    STATUS_META.pending ??
+    ACADEMIC_FALLBACK_STATUS_META
+  );
 }
 
 export const ACADEMIC_STATUS_MESSAGE: Record<AcademicStatus, string> = {

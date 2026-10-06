@@ -107,3 +107,64 @@ export function buildAcademicNotes({
     `Instruksi/Rubrik Dosen: ${rubricUrl.trim()}`,
   ].join("\n");
 }
+
+export interface ParsedAcademicNotes {
+  layanan: string;
+  deadline: string;
+  whatsapp: string;
+  instructions: string;
+  rubricUrl: string;
+}
+
+const EMPTY_ACADEMIC_NOTES: ParsedAcademicNotes = {
+  layanan: "",
+  deadline: "",
+  whatsapp: "",
+  instructions: "",
+  rubricUrl: "",
+};
+
+/**
+ * Kebalikan dari `buildAcademicNotes`: memecah string `notes` yang dipadatkan
+ * menjadi field terstruktur sehingga kartu riwayat tidak perlu merender blob
+ * teks mentah. Aman untuk notes lama/kosong (semua field menjadi "").
+ *
+ * Baris lanjutan tanpa prefix yang dikenal (mis. instruksi multi-baris)
+ * digabungkan ke field yang sedang aktif. `Instruksi/Rubrik Dosen:` dicek
+ * sebelum `Instruksi:` agar tidak tertangkap oleh prefix yang lebih pendek.
+ */
+export function parseAcademicNotes(notes: string | null): ParsedAcademicNotes {
+  if (!notes) {
+    return { ...EMPTY_ACADEMIC_NOTES };
+  }
+
+  const parsed: ParsedAcademicNotes = { ...EMPTY_ACADEMIC_NOTES };
+  const prefixes: readonly [string, keyof ParsedAcademicNotes][] = [
+    ["Layanan:", "layanan"],
+    ["Deadline:", "deadline"],
+    ["WA:", "whatsapp"],
+    ["Instruksi/Rubrik Dosen:", "rubricUrl"],
+    ["Instruksi:", "instructions"],
+  ];
+
+  let current: keyof ParsedAcademicNotes | null = null;
+
+  for (const line of notes.split(/\r?\n/)) {
+    const matched = prefixes.find(([prefix]) => line.startsWith(prefix));
+
+    if (matched) {
+      const [prefix, key] = matched;
+      current = key;
+      parsed[key] = line.slice(prefix.length).trim();
+      continue;
+    }
+
+    if (current && line.trim() !== "") {
+      parsed[current] = parsed[current]
+        ? `${parsed[current]}\n${line.trim()}`
+        : line.trim();
+    }
+  }
+
+  return parsed;
+}

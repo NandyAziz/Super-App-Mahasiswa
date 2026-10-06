@@ -24,11 +24,13 @@ const STATUS_COPY: Record<string, StatusCopy> = {
     verb: "menunggu verifikasi pembayaran",
     tone: "warning",
   },
-  accepted: { verb: "diterima", tone: "info" },
-  in_progress: { verb: "sedang berjalan", tone: "info" },
-  completed: { verb: "selesai", tone: "success" },
+  accepted: { verb: "diterima Tim Campify", tone: "info" },
+  // Redaksi selaras dengan notifikasi status tersimpan (status-copy.ts).
+  in_progress: { verb: "sedang diproses", tone: "info" },
+  out_for_delivery: { verb: "sedang diantar ke lokasimu", tone: "info" },
+  completed: { verb: "sudah diantarkan", tone: "success" },
   cancelled: { verb: "dibatalkan", tone: "danger" },
-  PAID: { verb: "sudah dibayar", tone: "success" },
+  PAID: { verb: "pembayaran diterima", tone: "success" },
 };
 
 function describe(order: OrderSummary): {
