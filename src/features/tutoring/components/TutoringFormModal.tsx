@@ -8,6 +8,7 @@ import { formatRupiah } from "@/lib/format";
 import { Modal } from "@/components/ui/Modal";
 import { TextField } from "@/components/ui/TextField";
 import { createTutoringSessionAction } from "../actions";
+import { startSnapPayment } from "@/features/payment/start-snap-payment";
 import { TUTORING_FLAT_RATE } from "../schemas";
 import type { TutoringActionResult } from "../types";
 
@@ -48,6 +49,21 @@ export function TutoringFormModal({
     resetForm();
     onClose();
     router.refresh();
+
+    // Submit → bayar tanpa langkah manual: tarif flat selalu > 0 sehingga
+    // `createMidtransSnapToken` + `window.snap.pay` langsung dijalankan.
+    const order = result.order;
+    if (order && order.price > 0) {
+      void startSnapPayment(
+        {
+          id: order.id,
+          title: order.subject,
+          service: "tutoring",
+          amount: order.price,
+        },
+        { onFinished: () => router.refresh() },
+      );
+    }
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>): void {

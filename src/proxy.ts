@@ -27,8 +27,11 @@ const AUTH_ROUTES = [
  *   dari ID/tautan tanpa akun. Datanya dibaca lewat RPC `security definer`
  *   yang hanya mengembalikan kolom aman-publik (lihat migrasi
  *   `20261017000000_public_order_tracking.sql`), bukan lewat RLS tabel.
+ * - `/api/webhooks` (notifikasi server-to-server): Midtrans mengirim POST
+ *   tanpa sesi browser; keaslian payload dijaga `signature_key` SHA-512 di
+ *   route handler, bukan oleh sesi Supabase.
  */
-const PUBLIC_ROUTES = ["/auth/callback", "/track"];
+const PUBLIC_ROUTES = ["/auth/callback", "/track", "/api/webhooks"];
 
 function matchesRoute(pathname: string, routes: string[]): boolean {
   return routes.some(

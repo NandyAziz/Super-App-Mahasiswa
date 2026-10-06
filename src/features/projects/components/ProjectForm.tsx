@@ -19,6 +19,7 @@ import { formatRupiah } from "@/lib/format";
 import { TextField } from "@/components/ui/TextField";
 import { TextareaField } from "@/components/ui/TextareaField";
 import { createProjectAction } from "../actions";
+import { startSnapPayment } from "@/features/payment/start-snap-payment";
 import { buildProjectDescription } from "../metadata";
 import { MIN_PROJECT_BUDGET, projectRequestSchema } from "../schemas";
 import { MAX_PROJECT_UPLOAD_BYTES, uploadProjectBrief } from "../upload";
@@ -180,6 +181,21 @@ export function ProjectForm({ onSuccess }: ProjectFormProps) {
     resetForm();
     onSuccess?.();
     router.refresh();
+
+    // Submit → bayar tanpa langkah manual: budget selalu > 0 (min. Rp10.000)
+    // sehingga Snap langsung dipicu tanpa bisa dilewati.
+    const order = result.order;
+    if (order && order.budget > 0) {
+      void startSnapPayment(
+        {
+          id: order.id,
+          title: order.title,
+          service: "projects",
+          amount: order.budget,
+        },
+        { onFinished: () => router.refresh() },
+      );
+    }
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>): void {

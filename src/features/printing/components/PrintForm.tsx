@@ -19,7 +19,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
-import { formatRupiah } from "@/lib/format";
+import { formatRupiah, getUrlLabel } from "@/lib/format";
 import {
   JASTIP_BASE_DISTANCE_KM,
   JASTIP_EXTRA_PER_KM,
@@ -32,6 +32,7 @@ import { FreeShippingBadge } from "@/features/orders/components/FreeShippingBadg
 import { applyFreeShipping, type FreeShippingStatus } from "@/features/orders/free-shipping";
 import type { AppliedPromo } from "@/features/promos/catalog";
 import { createPrintOrderAction } from "../actions";
+import { startSnapPayment } from "@/features/payment/start-snap-payment";
 import {
   PRINT_DELIVERY_ZONE_HINT,
   resolvePrintDeliveryEstimate,
@@ -245,6 +246,22 @@ export function PrintForm({ onSuccess, appliedPromo = null, freeShipping = null 
     resetForm();
     onSuccess?.();
     router.refresh();
+
+    // Submit → bayar tanpa langkah manual: Snap dipicu otomatis bila ongkir
+    // > 0. Gratis ongkir = tanpa tagihan online (biaya cetak dikonfirmasi
+    // Tim Campify via WhatsApp, bukan lewat Midtrans).
+    const order = result.order;
+    if (order && order.delivery_fee > 0) {
+      void startSnapPayment(
+        {
+          id: order.id,
+          title: getUrlLabel(order.document_url),
+          service: "printing",
+          amount: order.delivery_fee,
+        },
+        { onFinished: () => router.refresh() },
+      );
+    }
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>): void {

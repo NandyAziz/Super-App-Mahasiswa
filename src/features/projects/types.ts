@@ -72,4 +72,9 @@ export interface ProjectActionResult {
   status: "success" | "error";
   message: string;
   fieldErrors?: Record<string, string>;
+  /**
+   * Terisi saat pembuatan proyek berhasil — baris baru agar form bisa
+   * langsung memicu pembayaran Snap (`startSnapPayment`).
+   */
+  order?: CodingProject;
 }

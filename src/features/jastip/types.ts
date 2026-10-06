@@ -47,6 +47,6 @@ export interface JastipActionResult {
   status: "success" | "error";
   message: string;
   fieldErrors?: Record<string, string>;
-  /** Terisi saat pembuatan titipan berhasil, agar UI langsung membuka QRIS. */
+  /** Terisi saat pembuatan titipan berhasil, agar form bisa langsung memicu pembayaran Snap. */
   order?: JastipOrder;
 }

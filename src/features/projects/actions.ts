@@ -94,16 +94,20 @@ export async function createProjectAction(
     return SESSION_EXPIRED;
   }
 
-  const { error } = await context.supabase.from("coding_projects").insert({
-    client_id: context.userId,
-    title: parsed.data.title,
-    description: parsed.data.description,
-    // `tech_stack` adalah `text[] not null`; kirim array eksplisit (default `[]`)
-    // alih-alih mengandalkan default database agar bebas dari perbedaan skema.
-    tech_stack: parsed.data.tech_stack,
-    budget: parsed.data.budget,
-    status: "pending",
-  });
+  const { data, error } = await context.supabase
+    .from("coding_projects")
+    .insert({
+      client_id: context.userId,
+      title: parsed.data.title,
+      description: parsed.data.description,
+      // `tech_stack` adalah `text[] not null`; kirim array eksplisit (default `[]`)
+      // alih-alih mengandalkan default database agar bebas dari perbedaan skema.
+      tech_stack: parsed.data.tech_stack,
+      budget: parsed.data.budget,
+      status: "pending",
+    })
+    .select("*")
+    .single();
 
   if (error) {
     console.error("[Projects] INSERT gagal:", {
@@ -128,6 +132,8 @@ export async function createProjectAction(
   return {
     status: "success",
     message: `Proyek dipublikasikan! Budget ${formatRupiah(parsed.data.budget)}`,
+    // Baris baru dipakai form untuk langsung memicu pembayaran Snap.
+    order: data as CodingProject,
   };
 }
 

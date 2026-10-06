@@ -5,7 +5,7 @@ import { History, PackagePlus, Plus, ShoppingBag, type LucideIcon } from "lucide
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Modal } from "@/components/ui/Modal";
-import { QrisPaymentModal } from "@/features/payment/components/QrisPaymentModal";
+import { SnapPaymentModal } from "@/features/payment/components/SnapPaymentModal";
 import type { FreeShippingStatus } from "@/features/orders/free-shipping";
 import { ORDER_RUNNING_STATUSES } from "@/features/orders/types";
 import type { AppliedPromo } from "@/features/promos/catalog";
@@ -105,10 +105,12 @@ export function JastipBoard({
         )
       : selectCourierOrders(orders, currentUserId);
 
-  /** Tutup form titipan lalu langsung buka QRIS untuk titipan yang baru dibuat. */
-  function handleCreated(order: JastipOrder): void {
+  /**
+   * Tutup form titipan. Pembayaran Snap dipicu otomatis oleh form
+   * (`startSnapPayment`) begitu pesanan `pending` terbuat dengan tagihan > 0.
+   */
+  function handleCreated(): void {
     setIsModalOpen(false);
-    setPayingOrder(order);
   }
 
   return (
@@ -199,7 +201,7 @@ export function JastipBoard({
       </Modal>
 
       {payingOrder ? (
-        <QrisPaymentModal
+        <SnapPaymentModal
           open
           onClose={() => setPayingOrder(null)}
           order={{

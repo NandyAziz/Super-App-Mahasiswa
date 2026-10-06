@@ -27,6 +27,7 @@ import {
   type JastipShippingBreakdown,
 } from "@/lib/pricing";
 import { createJastipOrderAction } from "../actions";
+import { startSnapPayment } from "@/features/payment/start-snap-payment";
 import { PromoBadge } from "@/features/promos/components/PromoBadge";
 import { FreeShippingBadge } from "@/features/orders/components/FreeShippingBadge";
 import { applyFreeShipping, type FreeShippingStatus } from "@/features/orders/free-shipping";
@@ -204,6 +205,22 @@ export function JastipCreateForm({
       onSuccess?.(result.order);
     }
     router.refresh();
+
+    // Submit → bayar tanpa langkah manual: `createMidtransSnapToken` +
+    // `window.snap.pay` dipicu otomatis bila ada tagihan (ongkir > 0).
+    // Gratis ongkir = tanpa pembayaran online (tidak ada yang ditagihkan).
+    const order = result.order;
+    if (order && order.delivery_tip > 0) {
+      void startSnapPayment(
+        {
+          id: order.id,
+          title: order.item_name,
+          service: "jastip",
+          amount: order.delivery_tip,
+        },
+        { onFinished: () => router.refresh() },
+      );
+    }
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>): void {

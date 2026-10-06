@@ -277,6 +277,9 @@ export function AcademicForm({ onSuccess }: AcademicFormProps) {
     resetForm();
     onSuccess?.();
     router.refresh();
+    // Catatan audit: layanan akademik BELUM menetapkan tagihan (read-model
+    // `amount = null`), sehingga tidak ada langkah Snap/pembayaran yang bisa
+    // dipicu setelah pengajuan dibuat — pesanan cukup berstatus `pending`.
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>): void {

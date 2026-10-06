@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { CircleCheck, Truck, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { QrisPaymentModal } from "@/features/payment/components/QrisPaymentModal";
+import { SnapPaymentModal } from "@/features/payment/components/SnapPaymentModal";
 import { ORDER_RUNNING_STATUSES } from "../types";
 import type { OrderSummary } from "../types";
 import { OrderSummaryCard } from "./OrderSummaryCard";
@@ -114,7 +114,7 @@ export function OrdersBoard({ orders }: OrdersBoardProps) {
       )}
 
       {payingOrder && payingOrder.amount !== null ? (
-        <QrisPaymentModal
+        <SnapPaymentModal
           open
           onClose={() => setPayingOrder(null)}
           order={{

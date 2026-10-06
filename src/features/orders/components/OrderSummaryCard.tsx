@@ -1,4 +1,4 @@
-import { CalendarClock, Download, FileText, QrCode } from "lucide-react";
+import { CalendarClock, CreditCard, Download, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   buildDocumentDownloadUrl,
@@ -11,7 +11,7 @@ import type { OrderSummary } from "../types";
 
 interface OrderSummaryCardProps {
   order: OrderSummary;
-  /** Diberikan oleh board untuk membuka modal pembayaran QRIS. */
+  /** Diberikan oleh board untuk membuka modal pembayaran Midtrans Snap. */
   onPay?: (order: OrderSummary) => void;
 }
 
@@ -119,8 +119,8 @@ export function OrderSummaryCard({ order, onPay }: OrderSummaryCardProps) {
           onClick={() => onPay(order)}
           className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-indigo-100 bg-indigo-50/70 px-4 py-2.5 text-xs font-semibold text-indigo-600 transition-all duration-200 active:scale-95"
         >
-          <QrCode className="h-4 w-4" />
-          <span>Bayar via QRIS</span>
+          <CreditCard className="h-4 w-4" />
+          <span>Bayar Sekarang</span>
         </button>
       ) : null}
     </article>

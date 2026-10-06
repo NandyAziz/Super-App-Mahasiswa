@@ -93,15 +93,19 @@ export async function createTutoringSessionAction(
     return SESSION_EXPIRED;
   }
 
-  const { error } = await context.supabase.from("tutoring_sessions").insert({
-    student_id: context.userId,
-    // Sesi selalu terbuka untuk semua tutor (tutor dipilih saat menerima).
-    tutor_id: null,
-    subject: parsed.data.subject,
-    scheduled_at: toScheduledAtIso(parsed.data.scheduled_at),
-    price: parsed.data.price,
-    status: "pending",
-  });
+  const { data, error } = await context.supabase
+    .from("tutoring_sessions")
+    .insert({
+      student_id: context.userId,
+      // Sesi selalu terbuka untuk semua tutor (tutor dipilih saat menerima).
+      tutor_id: null,
+      subject: parsed.data.subject,
+      scheduled_at: toScheduledAtIso(parsed.data.scheduled_at),
+      price: parsed.data.price,
+      status: "pending",
+    })
+    .select("*")
+    .single();
 
   if (error) {
     console.error("[Tutoring] INSERT gagal:", {
@@ -123,7 +127,12 @@ export async function createTutoringSessionAction(
   }
 
   revalidatePath(TUTORING_PATH);
-  return { status: "success", message: TUTORING_STATUS_MESSAGE.pending };
+  return {
+    status: "success",
+    message: TUTORING_STATUS_MESSAGE.pending,
+    // Baris baru dipakai form untuk langsung memicu pembayaran Snap.
+    order: data as TutoringSession,
+  };
 }
 
 export async function getTutoringSessionsAction(): Promise<TutoringSession[]> {

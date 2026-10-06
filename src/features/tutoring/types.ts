@@ -50,4 +50,9 @@ export interface TutoringActionResult {
   status: "success" | "error";
   message: string;
   fieldErrors?: Record<string, string>;
+  /**
+   * Terisi saat pembuatan sesi berhasil — baris baru agar form bisa langsung
+   * memicu pembayaran Snap (`startSnapPayment`).
+   */
+  order?: TutoringSession;
 }

@@ -28,6 +28,12 @@ Lihat [`.env.example`](./.env.example). Variabel wajib:
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `MIDTRANS_MERCHANT_ID`, `MIDTRANS_SERVER_KEY`,
+  `NEXT_PUBLIC_MIDTRANS_CLIENT_KEY`, `NEXT_PUBLIC_MIDTRANS_SNAP_URL` —
+  kredensial Midtrans Snap **Production** untuk pembayaran online.
+- `SUPABASE_SERVICE_ROLE_KEY` — client admin untuk webhook
+  `/api/webhooks/midtrans` (update status tanpa sesi; wajib agar notifikasi
+  pembayaran bisa ditulis melewati RLS).
 
 Opsional:
 
@@ -35,16 +41,30 @@ Opsional:
   `https://campify.example.com`). Bila kosong, aplikasi memakai header host
   (`x-forwarded-host`) atau `window.location.origin` secara otomatis.
 
-## Pembayaran (Manual QRIS)
+## Pembayaran (Midtrans Snap — PRODUCTION)
 
-Pembayaran memakai **QRIS merchant statis** — ganti berkas
-`public/images/qris-merchant.png` dengan QR merchant asli. Alur:
+Pembayaran online memakai **Midtrans Snap** dengan kredensial **Production**
+(`MIDTRANS_MERCHANT_ID`, `MIDTRANS_SERVER_KEY`, `NEXT_PUBLIC_MIDTRANS_CLIENT_KEY`,
+`NEXT_PUBLIC_MIDTRANS_SNAP_URL=https://app.midtrans.com/snap/snap.js`). Alur:
 
-1. Pemesan memindai QR & membayar, lalu mengunggah **bukti transfer** di modal
-   pembayaran → status pesanan menjadi `PENDING_VERIFICATION`.
-2. Operator membuka **dashboard `/admin`**, melihat bukti, lalu menekan
-   **Konfirmasi Pembayaran** → status menjadi `PAID` (Jastip: `accepted`).
-3. Status lanjut `PAID → in_progress → completed` dikelola operator.
+1. Pemesan menekan **Bayar Sekarang** di kartu pesanan → modal checkout memuat
+   skrip `snap.js` & meminta token lewat Server Action
+   `createMidtransSnapToken` (divalidasi Zod + dicek ulang terhadap tagihan
+   asli di database, RLS-protected).
+2. `window.snap.pay(token)` membuka jendela Snap (QRIS, Virtual Account,
+   e-wallet, kartu). Callback `onSuccess`/`onPending` memberi toast instan +
+   `router.refresh()` — sumber kebenaran status tetap webhook.
+3. Midtrans mengirim notifikasi ke **`POST /api/webhooks/midtrans`**
+   (terbuka untuk luar sesi di `src/proxy.ts`, wajib lolos verifikasi
+   `signature_key` SHA-512) → pesanan diupdate via Supabase **service role**
+   (`SUPABASE_SERVICE_ROLE_KEY`): `settlement`/`capture` → `PAID`
+   (Jastip: `accepted`), `deny`/`cancel`/`expire` → `cancelled`.
+4. Operator tetap memantau di **dashboard `/admin`**; status lanjut
+   `PAID → in_progress → completed` dikelola operator.
+
+> Verifikasi notifikasi juga bisa dicek ulang ke Midtrans via GET Status API.
+> Simpan URL notifikasi di Midtrans Dashboard → SETTINGS → CONFIGURATION →
+> Payment Notification URL: `https://<domain-anda>/api/webhooks/midtrans`.
 
 ## Database (Supabase)
 
@@ -109,7 +129,10 @@ Untuk menjadikan akun sebagai operator, set `role = 'admin'` pada baris
 
 1. Push repo ke Git, hubungkan ke Netlify (Next.js terdeteksi otomatis).
 2. Set environment variable (`NEXT_PUBLIC_SUPABASE_URL`,
-   `NEXT_PUBLIC_SUPABASE_ANON_KEY`, dan opsional `NEXT_PUBLIC_APP_URL`) di
+   `NEXT_PUBLIC_SUPABASE_ANON_KEY`, kredensial Midtrans Snap Production
+   (`MIDTRANS_MERCHANT_ID`, `MIDTRANS_SERVER_KEY`,
+   `NEXT_PUBLIC_MIDTRANS_CLIENT_KEY`, `NEXT_PUBLIC_MIDTRANS_SNAP_URL`),
+   `SUPABASE_SERVICE_ROLE_KEY`, dan opsional `NEXT_PUBLIC_APP_URL`) di
    **Site settings → Environment variables**.
 3. Daftarkan domain produksi pada **Supabase Auth → URL Configuration** dan
    konsol OAuth Google/GitHub (redirect: `https://<domain>/auth/callback`).

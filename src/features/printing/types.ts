@@ -52,4 +52,9 @@ export interface PrintActionResult {
   status: "success" | "error";
   message: string;
   fieldErrors?: Record<string, string>;
+  /**
+   * Terisi saat pembuatan pesanan berhasil — membawa baris yang baru dibuat
+   * agar form bisa langsung memicu pembayaran Snap (`startSnapPayment`).
+   */
+  order?: PrintOrder;
 }

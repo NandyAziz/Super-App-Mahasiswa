@@ -142,19 +142,23 @@ export async function createPrintOrderAction(
     ? [custom_note, promo.claimNote].filter(Boolean).join(" ").slice(0, 500)
     : custom_note;
 
-  const { error } = await context.supabase.from("print_orders").insert({
-    user_id: context.userId,
-    document_url,
-    copies,
-    contact_whatsapp,
-    delivery_location,
-    custom_note: mergedNote,
-    delivery_fee: finalDeliveryFee,
-    destination_lat,
-    destination_lng,
-    promo_code: promo?.code ?? null,
-    status: "pending",
-  });
+  const { data, error } = await context.supabase
+    .from("print_orders")
+    .insert({
+      user_id: context.userId,
+      document_url,
+      copies,
+      contact_whatsapp,
+      delivery_location,
+      custom_note: mergedNote,
+      delivery_fee: finalDeliveryFee,
+      destination_lat,
+      destination_lng,
+      promo_code: promo?.code ?? null,
+      status: "pending",
+    })
+    .select("*")
+    .single();
 
   if (error) {
     // Log terstruktur agar akar masalah (kolom hilang / schema cache basi /
@@ -176,10 +180,14 @@ export async function createPrintOrderAction(
   }
 
   revalidatePath(PRINTING_PATH);
+  // Baris baru dikembalikan agar form bisa langsung memicu pembayaran Snap
+  // tanpa query tambahan (RLS memastikan hanya baris milik pemesan yang terbaca).
+  const order = data as PrintOrder;
   if (freeShipping.eligible) {
     return {
       status: "success",
       message: `Pesanan cetak dibuat! 🎉 Gratis Ongkir (Pesanan Ke-${freeShipping.nextOrderNumber}) · Tim Campify akan segera menghubungi kamu.`,
+      order,
     };
   }
   return {
@@ -187,6 +195,7 @@ export async function createPrintOrderAction(
     message: promo
       ? `Pesanan cetak dibuat! Ongkir ${formatRupiah(finalDeliveryFee)} · ${promo.badge} aktif, konfirmasi via WhatsApp.`
       : `Pesanan cetak dibuat! Ongkir ${formatRupiah(finalDeliveryFee)} · Tim Campify akan segera menghubungi kamu.`,
+    order,
   };
 }
 

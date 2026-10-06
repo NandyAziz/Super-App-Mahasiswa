@@ -4,10 +4,10 @@ import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import {
   ArrowRight,
+  CreditCard,
   Loader2,
   MapPin,
   Package,
-  QrCode,
   UserRound,
   Wallet,
 } from "lucide-react";
@@ -22,7 +22,7 @@ import type { JastipActionResult, JastipOrder } from "../types";
 interface JastipCardProps {
   order: JastipOrder;
   currentUserId: string;
-  /** Membuka modal pembayaran QRIS untuk titipan yang belum dibayar. */
+  /** Membuka modal pembayaran Midtrans Snap untuk titipan yang belum dibayar. */
   onPay?: (order: JastipOrder) => void;
 }
 
@@ -34,7 +34,10 @@ export function JastipCard({ order, currentUserId, onPay }: JastipCardProps) {
   const meta = getJastipStatusMeta(order.status);
   const action = resolveCardAction(order, currentUserId);
   const isOwner = order.user_id === currentUserId;
-  const isPayable = isOwner && order.status === "pending";
+  // Hanya tagihan nyata (> 0) yang bisa dibayar — ongkir gratis (Rp0) tidak
+  // memunculkan tombol karena server menolak nominal nol saat membuat token.
+  const isPayable =
+    isOwner && order.status === "pending" && order.delivery_tip > 0;
 
   function applyResult(result: JastipActionResult): void {
     if (result.status === "error") {
@@ -130,8 +133,8 @@ export function JastipCard({ order, currentUserId, onPay }: JastipCardProps) {
           onClick={() => onPay(order)}
           className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-indigo-100 bg-indigo-50/70 px-4 py-2.5 text-xs font-semibold text-indigo-600 transition-all duration-200 active:scale-95"
         >
-          <QrCode className="h-4 w-4" />
-          <span>Bayar via QRIS</span>
+          <CreditCard className="h-4 w-4" />
+          <span>Bayar Sekarang</span>
         </button>
       ) : null}
     </article>
