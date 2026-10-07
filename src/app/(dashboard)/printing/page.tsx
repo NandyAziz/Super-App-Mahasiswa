@@ -90,7 +90,7 @@ export default async function PrintingPage({ searchParams }: PrintingPageProps) 
   const { promo } = await searchParams;
 
   return (
-    <div className="flex flex-col gap-5 px-5 pt-6 pb-24">
+    <div className="flex flex-col gap-5 px-5 pt-6 pb-28">
       <header className="flex items-center gap-3">
         <Link
           href="/"

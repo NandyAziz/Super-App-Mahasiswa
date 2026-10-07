@@ -63,7 +63,7 @@ export function ClearAllInboxButton() {
         onClick={() => setIsOpen(true)}
         disabled={isPending}
         aria-label="Hapus Semua Notifikasi & Pesan"
-        className="flex shrink-0 items-center gap-1.5 rounded-2xl border border-rose-200 bg-white/70 px-3 py-2 text-[0.7rem] font-semibold text-rose-600 shadow-sm backdrop-blur-md transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+        className="text-xs text-red-600 hover:bg-red-50 active:bg-red-100 px-3 py-1 rounded-full font-medium transition-colors flex items-center gap-1 border border-red-200/60"
       >
         {isPending ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin" />

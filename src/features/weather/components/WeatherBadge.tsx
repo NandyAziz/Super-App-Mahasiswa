@@ -9,7 +9,7 @@ interface WeatherBadgeProps {
 }
 
 /**
- * Badge cuaca kampus 2.0: pill `rounded-2xl` dengan ikon + label Indonesia.
+ * Weather badge kampus 2.0: fixed-height pill dengan ikon + status + suhu.
  *
  * Contoh tampil: `🌦️ Hujan Ringan • 24°C`. Data awal diisi server
  * (`fetchWeatherBadge`), lalu disegarkan sekali di client agar suhu tetap
@@ -30,8 +30,15 @@ export function WeatherBadge({ initial = null }: WeatherBadgeProps) {
 
   if (!weather) {
     return (
-      <span className="inline-flex animate-pulse items-center gap-1.5 rounded-2xl border border-white/20 bg-white/70 px-3 py-1.5 text-[0.7rem] font-medium text-zinc-400 backdrop-blur-md">
-        Memuat cuaca…
+      <span
+        role="status"
+        aria-label="Cuaca kampus: Cerah, 20°C"
+        className="flex items-center gap-1.5 rounded-full border border-white/20 bg-white/80 px-2.5 py-1 text-[0.7rem] font-medium text-slate-600 backdrop-blur-md"
+      >
+        <span aria-hidden="true">☀️</span>
+        Cerah
+        <span aria-hidden="true">•</span>
+        <span>20°C</span>
       </span>
     );
   }
@@ -43,11 +50,16 @@ export function WeatherBadge({ initial = null }: WeatherBadgeProps) {
     <span
       role="status"
       aria-label={`Cuaca kampus: ${weather.condition}${temperatureLabel ? `, ${temperatureLabel}` : ""}`}
-      className="inline-flex items-center gap-1.5 rounded-2xl border border-sky-100 bg-sky-50/80 px-3 py-1.5 text-[0.7rem] font-semibold text-sky-700 backdrop-blur-md"
+      className="flex items-center gap-1.5 rounded-full bg-slate-100/90 px-2.5 py-1 text-xs font-medium text-slate-700"
     >
       <span aria-hidden="true">{weather.icon}</span>
       <span>{weather.condition}</span>
-      {temperatureLabel ? <span>• {temperatureLabel}</span> : null}
+      {temperatureLabel ? (
+        <>
+          <span aria-hidden="true">•</span>
+          <span>{temperatureLabel}</span>
+        </>
+      ) : null}
     </span>
   );
 }

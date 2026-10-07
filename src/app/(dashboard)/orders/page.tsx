@@ -43,7 +43,7 @@ async function OrdersBoardLoader() {
 
 export default function OrdersPage() {
   return (
-    <div className="flex flex-col gap-5 px-5 pt-6 pb-6">
+    <div className="flex flex-col gap-5 px-5 pt-6 pb-28">
       <Suspense
         fallback={
           <>

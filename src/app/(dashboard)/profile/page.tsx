@@ -8,7 +8,6 @@ import {
   ListChecks,
   Mail,
   TrendingUp,
-  UserRound,
 } from "lucide-react";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import { fetchOrderSummaries } from "@/features/orders/queries";
@@ -53,6 +52,13 @@ async function ProfileContent() {
     role: "user",
   };
 
+  // Initials dari nama depan + belakang (jika ada).
+  const nameParts = identity.fullName.trim().split(/\s+/);
+  const initials =
+    nameParts.length >= 2
+      ? `${nameParts[0][0]}${nameParts[nameParts.length - 1][0]}`
+      : nameParts[0]?.[0] ?? "?";
+
   return (
     <div className="flex flex-col gap-5">
       <section className="rounded-xl border border-slate-200/80 bg-white p-5 shadow-xs">
@@ -68,8 +74,8 @@ async function ProfileContent() {
               className="h-16 w-16 rounded-xl border border-slate-200 object-cover"
             />
           ) : (
-            <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border border-indigo-100 bg-indigo-50 text-indigo-600">
-              <UserRound className="h-8 w-8" />
+            <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border border-indigo-100 bg-gradient-to-br from-indigo-500 via-violet-500 to-purple-600 text-white shadow-sm shadow-indigo-500/30">
+              <span className="text-sm font-bold tracking-wide">{initials}</span>
             </span>
           )}
 
@@ -125,7 +131,7 @@ async function ProfileContent() {
 
 export default function ProfilePage() {
   return (
-    <div className="flex flex-col gap-5 px-4 pt-5 pb-6">
+    <div className="flex flex-col gap-5 px-4 pt-5 pb-28">
       <header>
         <h1 className="text-lg font-semibold text-slate-900">Profil Mahasiswa</h1>
         <p className="text-xs text-slate-500">

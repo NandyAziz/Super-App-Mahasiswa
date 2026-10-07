@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+﻿import { Suspense } from "react";
 import type { Metadata } from "next";
 import { BellOff, Inbox as InboxIcon, Loader2 } from "lucide-react";
 import { fetchOrderSummaries } from "@/features/orders/queries";
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
 function InboxHeader({ total }: { total: number }) {
   return (
     <header className="rounded-3xl border border-white/20 bg-white/70 p-5 shadow-sm backdrop-blur-md">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between w-full gap-3">
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-sm shadow-indigo-500/30">
           <InboxIcon className="h-5 w-5" />
         </span>
