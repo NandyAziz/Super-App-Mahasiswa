@@ -18,30 +18,28 @@ export const metadata: Metadata = {
  */
 function InboxHeader({ total }: { total: number }) {
   return (
-    <header className="rounded-3xl border border-white/20 bg-white/70 p-5 shadow-sm backdrop-blur-md">
-      <div className="flex items-center justify-between w-full gap-3">
+    <div className="flex items-center justify-between gap-2 w-full p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+      <div className="flex items-center gap-3 min-w-0">
+        {/* Icon wrapper */}
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-sm shadow-indigo-500/30">
           <InboxIcon className="h-5 w-5" />
         </span>
-        <div className="flex items-center gap-2">
-          <div className="min-w-0 flex-1">
-            <h1 className="text-base font-semibold text-zinc-900">
-              Notifikasi &amp; Pesan
-            </h1>
-            <p className="truncate text-xs text-zinc-500">
-              {total > 0
-                ? `${total} kabar terbaru dari pesananmu.`
-                : "Pantau kabar terbaru dari semua pesananmu."}
-            </p>
-          </div>
-
-          {/* Aksi "Hapus Semua" — satu tombol untuk satu tampilan gabungan. */}
-          <div className="flex shrink-0 items-center gap-2">
-            <ClearAllInboxButton />
-          </div>
+        <div className="flex-1 min-w-0">
+          <h1 className="text-base font-semibold text-slate-900 dark:text-white truncate">
+            Notifikasi &amp; Pesan
+          </h1>
+          <p className="text-xs text-slate-500 truncate">
+            {total > 0
+              ? `${total} kabar terbaru dari pesananmu.`
+              : "Pantau kabar terbaru dari semua pesananmu."}
+          </p>
         </div>
       </div>
-    </header>
+      {/* Button container */}
+      <div className="shrink-0">
+        <ClearAllInboxButton />
+      </div>
+    </div>
   );
 }
 
